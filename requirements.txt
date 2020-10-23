@@ -1,2 +1,2 @@
-tensorflow-gpu
+tensorflow-gpu==2.2
 earthengine-api
