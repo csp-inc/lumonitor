@@ -1,2 +1,11 @@
+# 2.2 latest supported by google AI AOTW
 tensorflow-gpu==2.2
 earthengine-api
+
+# needed for GDAL
+wheel
+# Or whatever local version you have
+GDAL==3.0.4
+
+
+azure-storage-blob
