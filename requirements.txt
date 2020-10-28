@@ -1,11 +1,9 @@
 # 2.2 latest supported by google AI AOTW
 tensorflow-gpu==2.2
+
+# We will likely need to sanitize this later
 earthengine-api
 
-# needed for GDAL
-wheel
-# Or whatever local version you have
-GDAL==3.0.4
-
-
 azure-storage-blob
+geopandas
+rtree
