@@ -1,7 +1,7 @@
 ## Container-based Azure Workflow
 
 This document describes best practices for using Azure
-Container Instances (ACI) to run project code. It is currently needed to
+Container Instances (ACI) to run project code. It is currently 
 needed to access HLS data on eastus2 shares, which MS suggests will be
 faster than accessing locally. In future, it may be needed for model training
 and prediction at large scale.
@@ -11,8 +11,7 @@ and prediction at large scale.
 -   Spend as little time as possible creating infrastructure and keep scripts
     out of project code as much as possible
 -   Integrate with existing knowledge base and code as much as possible
--   Ensure unused VMs and containers don't continue to run (to save costs)
--   In general, minimize costs as much as possible
+-   Ensure unused VMs and containers don't continue to run (to save costs), and minimize costs as much as possible in general
 
 ### Solution summary
 
@@ -21,15 +20,16 @@ to create and manage container instances through ACI. This meets the goals in
 several ways:
 
 -   This workflow will largely keep us out of the Azure portal and Azure CLI,
-    which are not part of legacy processes and require learning overhead.
+    which are not part of legacy processes and requires overhead to learn.
 -   By creating and setting the context using docker, we can move processes
     from local docker containers to Azure-hosted container with a single
-    command line option.
+    command line option. (Save for the differences in arguments available when 
+    using an Azure-based context; see below).
 -   Container instances incur costs only while they are running. By nature
     containers only run for the lifetime of the process (if started with the
     `docker run` command and not `docker exec`, of course).
 -   By using docker instead of the Azure command line tool, we bypass the Azure
-    container registry, which incurs costs for container storage.
+    container registry which incurs costs for container storage.
 
 ### Solution steps
 
