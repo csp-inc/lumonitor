@@ -5,6 +5,7 @@ Lumonitor is short for "land use monitor", but we are really only interested in 
 ### What's here
 
 __src/__: Code files to collect and process data sources
+__docs/__: Project related documents and write-ups
 
 ### What's needed
 

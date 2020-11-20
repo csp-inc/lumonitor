@@ -5,7 +5,7 @@ import geopandas as gp
 from shapely.geometry import Polygon
 
 def get_tile_ids(gp_df):
-    tiles = gp.read_file('/data/mgrs_region.shp')
+    tiles = gp.read_file('data/lumonitor-eastus2/mgrs_region.shp')
     overlapping_tiles = gp.overlay(gp_df, tiles, how="intersection")
     return list(overlapping_tiles['GRID1MIL'] + overlapping_tiles['GRID100K'])
 
@@ -37,4 +37,4 @@ area = area.set_crs('EPSG:4326')
 tile_ids = get_tile_ids(area)
 paths = get_paths(tile_ids[0], 2016)
 
-create_vrt(paths, '/data/test.vrt')
+create_vrt(paths, 'data/lumonitor-eastus2/today.vrt')
