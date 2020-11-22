@@ -11,8 +11,8 @@ az container create \
   --image blindjesse/lumonitor:0.1 \
   --gitrepo-url https://github.com/csp-inc/lumonitor.git \
   --gitrepo-mount-path /lumonitor \
-  --azure-file-volume-account-key M8UkwC4ZnbUuLPT+/7oZVMm1oqCVAfpc5rJVOc42+kzUr6wUo3yo7pYXS8KNpCiXeVbjgK5DyUKFTKuw/J8NgA== \
-  --azure-file-volume-account-name lumonitoreastus2 \
+  --azure-file-volume-account-key $AZURE_EASTUS2_VOLUME_ACCOUNT_KEY \
+  --azure-file-volume-account-name $AZURE_EASTUS2_VOLUME_ACCOUNT \
   --azure-file-volume-share-name data \
   --azure-file-volume-mount-path /lumonitor/data/lumonitor-eastus2 \
   --command-line "/bin/sh -c 'cd lumonitor;$@'" \
