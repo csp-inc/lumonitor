@@ -16,10 +16,15 @@ def get_paths(tile_id, year):
             container_name='hls', 
             credential="st=2019-08-07T14%3A54%3A43Z&se=2050-08-08T14%3A54%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=EYNJCexDl5yxb1TxNH%2FzILznc3TiAnJq%2FPvCumkuV5U%3D"
             )
-    prefix = 'L309/HLS.L30.T' + tile_id + '.' + str(year)
-    # needs to be streaming or it downloads the whole thing
-    vfs = '/vsiaz_streaming/hls/'
-    return [ vfs + blob.name for blob in cc.list_blobs(name_starts_with=prefix) ]
+
+    paths = []
+    for tile_id in tile_ids:
+        prefix = 'L309/HLS.L30.T' + tile_id + '.' + str(year)
+        # needs to be streaming or it downloads the whole thing
+        vfs = '/vsiaz_streaming/hls/'
+        paths.append([ vfs + blob.name for blob in cc.list_blobs(name_starts_with=prefix) ])
+
+    return paths
 
 def create_vrt(paths, output_file):
     # GDAL 3.2 needed for options
@@ -29,12 +34,11 @@ def create_vrt(paths, output_file):
     gdal.BuildVRT(output_file, paths, options=opts)
 
 # Just for testing purposes
-[-125.27, 24.190],[-66.54,49.4]
 area = gp.GeoDataFrame({'geometry': gp.GeoSeries([Polygon([(-126,24),(-66, 24), (-126, 50), (-66,50)])]),
                         'id':[1]})
 area = area.set_crs('EPSG:4326')
 
 tile_ids = get_tile_ids(area)
-paths = get_paths(tile_ids[0], 2016)
+paths = get_paths(tile_ids, 2016)
 
 create_vrt(paths, 'data/lumonitor-eastus2/today.vrt')
