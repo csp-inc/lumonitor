@@ -25,12 +25,12 @@ def create_vrt(paths, output_file):
     # GDAL 3.2 needed for options
     gdal.SetConfigOption("AZURE_SAS", "st=2019-08-07T14%3A54%3A43Z&se=2050-08-08T14%3A54%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=EYNJCexDl5yxb1TxNH%2FzILznc3TiAnJq%2FPvCumkuV5U%3D")
     gdal.SetConfigOption("AZURE_STORAGE_ACCOUNT", "hlssa")
-    # This step takes ~40 minutes for one tile id and one year
     opts = gdal.BuildVRTOptions(separate=True)
     gdal.BuildVRT(output_file, paths, options=opts)
 
 # Just for testing purposes
-area = gp.GeoDataFrame({'geometry': gp.GeoSeries([Polygon([(-111,35),(-110, 35), (-110, 36), (-111,36)])]),
+[-125.27, 24.190],[-66.54,49.4]
+area = gp.GeoDataFrame({'geometry': gp.GeoSeries([Polygon([(-126,24),(-66, 24), (-126, 50), (-66,50)])]),
                         'id':[1]})
 area = area.set_crs('EPSG:4326')
 
