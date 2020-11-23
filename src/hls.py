@@ -22,7 +22,7 @@ def get_paths(tile_id, year):
         prefix = 'L309/HLS.L30.T' + tile_id + '.' + str(year)
         # needs to be streaming or it downloads the whole thing
         vfs = '/vsiaz_streaming/hls/'
-        these_paths = [ vfs + blob.name for blob in cc.list_blobs(name_starts_with=prefix) ])
+        these_paths = [ vfs + blob.name for blob in cc.list_blobs(name_starts_with=prefix) ]
         paths = paths + these_paths
 
 
