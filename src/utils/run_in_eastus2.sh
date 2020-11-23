@@ -7,6 +7,8 @@ az container create \
   -g $GROUP \
   -n $NAME \
   -l eastus2 \
+  --cpu 1 \
+  --memory 16 \
   --subscription "Microsoft Azure Sponsorship AI for Earth 40K" \
   --image blindjesse/lumonitor:0.1 \
   --gitrepo-url https://github.com/csp-inc/lumonitor.git \
