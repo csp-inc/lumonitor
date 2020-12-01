@@ -7,3 +7,5 @@ earthengine-api
 azure-storage-blob
 geopandas
 rtree
+
+rasterio
