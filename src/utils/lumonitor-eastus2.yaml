@@ -1,0 +1,17 @@
+additional_properties: {}
+apiVersion: '2019-12-01'
+name: lumonitor-eastus2
+properties:
+  containers:
+  - name: lumonitor-eastus2
+    properties:
+      image: blindjesse/lumonitor:0.1
+      resources:
+        requests:
+          cpu: 1.0
+          memoryInGB: 56
+          gpu:
+            count: 1
+            sku: K80
+  osType: Linux
+  restartPolicy: OnFailure

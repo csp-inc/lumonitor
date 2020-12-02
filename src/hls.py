@@ -13,13 +13,13 @@ def get_summaries(tile_id, year):
     sdss = [ '01','02','03','04','05','06','07','08','09','10'] 
     stacks = dict.fromkeys(sdss, [])
     for daynum in get_daynums(all_paths):
-        print(daynum)
         qa_path = filter_daynum(filter_subdatasets(all_paths, '11'), daynum)[0]
         qa_ds = gdal.Open(qa_path)
         qa = np.array(qa_ds.GetRasterBand(1).ReadAsArray())
         mask = get_mask(qa)
         for sds in sdss:
             img_path = filter_daynum(filter_subdatasets(all_paths,sds), daynum)[0]
+            print(img_path)
             img_ds = gdal.Open(img_path)
             img = np.array(img_ds.GetRasterBand(1).ReadAsArray()).astype(np.float64)
             img[mask] = np.nan
@@ -104,6 +104,7 @@ output_dir = 'data'
 
 gdal.SetConfigOption("AZURE_SAS", "st=2019-08-07T14%3A54%3A43Z&se=2050-08-08T14%3A54%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=EYNJCexDl5yxb1TxNH%2FzILznc3TiAnJq%2FPvCumkuV5U%3D")
 gdal.SetConfigOption("AZURE_STORAGE_ACCOUNT", "hlssa")
+gdal.SetConfigOption("GTIFF_IGNORE_READ_ERRORS", "YES")
 
 summaries = get_summaries(tile_id, year)
 for (sds, summary) in summaries['summaries'].items():
