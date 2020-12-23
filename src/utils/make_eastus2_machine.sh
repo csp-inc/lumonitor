@@ -8,4 +8,4 @@ docker-machine create -d azure \
   --azure-ssh-user jesse \
   --azure-size Standard_E8s_v3 \
   --azure-open-port 80 \
-  azuresucks
+  azurerocks
