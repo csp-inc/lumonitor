@@ -10,7 +10,8 @@ def get_summaries(tile_id, year):
     # There may be better ways...
     all_paths = get_paths(tile_id, year)
 
-    sdss = [ '01','02','03','04','05','06','07','08','09','10'] 
+    #sdss = [ '01','02','03','04','05','06','07','08','09','10'] 
+    sdss = ['01','02']
     stacks = dict.fromkeys(sdss, [])
     for daynum in get_daynums(all_paths):
         qa_path = filter_daynum(filter_subdatasets(all_paths, '11'), daynum)[0]
@@ -19,7 +20,6 @@ def get_summaries(tile_id, year):
         mask = get_mask(qa)
         for sds in sdss:
             img_path = filter_daynum(filter_subdatasets(all_paths,sds), daynum)[0]
-            print(img_path)
             img_ds = gdal.Open(img_path)
             img = np.array(img_ds.GetRasterBand(1).ReadAsArray()).astype(np.float64)
             img[mask] = np.nan
@@ -42,16 +42,15 @@ def get_tile_ids(gp_df):
 
 def get_paths(tile_id, year):
     # For options and path structure, see https://azure.microsoft.com/en-us/services/open-datasets/catalog/hls/
+    url = "https://hlssa.blob.core.windows.net"
     cc = ContainerClient(
-            account_url="https://hlssa.blob.core.windows.net", 
+            account_url=url,
             container_name='hls', 
             credential="st=2019-08-07T14%3A54%3A43Z&se=2050-08-08T14%3A54%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=EYNJCexDl5yxb1TxNH%2FzILznc3TiAnJq%2FPvCumkuV5U%3D"
             )
 
-    prefix = 'L309/HLS.L30.T' + tile_id + '.' + str(year)
-    # needs to be streaming or it downloads the whole thing
-    vfs = '/vsiaz_streaming/hls/'
-    return [ vfs + blob.name for blob in cc.list_blobs(name_starts_with=prefix) ]
+    prefix = 'hls/L309/HLS.L30.T' + tile_id + '.' + str(year)
+    return [ os.path.join(url, blob.name) for blob in cc.list_blobs(name_starts_with=prefix) ]
 
 def get_daynums(paths):
     if not isinstance(paths, list):
@@ -107,8 +106,9 @@ gdal.SetConfigOption("AZURE_STORAGE_ACCOUNT", "hlssa")
 gdal.SetConfigOption("GTIFF_IGNORE_READ_ERRORS", "YES")
 
 summaries = get_summaries(tile_id, year)
-for (sds, summary) in summaries['summaries'].items():
-    output_file = os.path.join(output_dir, 
-            tile_id + '_' + year + '_' + sds + '.tif')
+#for (sds, summary) in summaries['summaries'].items():
+#    output_file = os.path.join(output_dir, 
+#            tile_id + '_' + year + '_' + sds + '.tif')
+#
+#    write_array_to_tiff(summary, output_file, summaries['model_ds'])
 
-    write_array_to_tiff(summary, output_file, summaries['model_ds'])
