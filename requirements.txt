@@ -1,11 +1,7 @@
-# 2.2 latest supported by google AI AOTW
-tensorflow-gpu==2.2
-
-# We will likely need to sanitize this later
-earthengine-api
-
-azure-storage-blob
-geopandas
-rtree
-
+azure.storage.blob
+dask[complete]
+numpy
+pandas
 rasterio
+rtree
+xarray

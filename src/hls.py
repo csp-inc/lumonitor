@@ -1,114 +1,67 @@
-from azure.storage.blob import ContainerClient
-import geopandas as gp
-from osgeo import gdal
-import numpy as np
-import numpy.ma as ma
-import os
+import dask.array as da
+import pandas as pd
+import xarray as xr
+from dask.distributed import Client
 
-def get_summaries(tile_id, year):
-    # I do this for multiple sdss so we don't have to re-get QA band.
-    # There may be better ways...
-    all_paths = get_paths(tile_id, year)
+import hls_tooling.utils.hls as hls
 
-    #sdss = [ '01','02','03','04','05','06','07','08','09','10'] 
-    sdss = ['01','02']
-    stacks = dict.fromkeys(sdss, [])
-    for daynum in get_daynums(all_paths):
-        qa_path = filter_daynum(filter_subdatasets(all_paths, '11'), daynum)[0]
-        qa_ds = gdal.Open(qa_path)
-        qa = np.array(qa_ds.GetRasterBand(1).ReadAsArray())
-        mask = get_mask(qa)
-        for sds in sdss:
-            img_path = filter_daynum(filter_subdatasets(all_paths,sds), daynum)[0]
-            img_ds = gdal.Open(img_path)
-            img = np.array(img_ds.GetRasterBand(1).ReadAsArray()).astype(np.float64)
-            img[mask] = np.nan
-            stacks[sds].append(img)
+def create_multiband_dataset(row, bands, chunks):
+    '''A function to load multiple bands into an xarray dataset '''
+    
+    # Each image is a dataset containing both band4 and band5
+    datasets = []
+    for band, url in zip(bands, hls.scene_to_urls(row['scene'], row['sensor'], bands)):
+    # needs something like export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+        da = xr.open_rasterio(url, chunks=chunks)
+        da = da.squeeze().drop(labels='band')
+        ds = da.to_dataset(name=band)
+        datasets.append(ds)
+    return xr.merge(datasets)
 
-    summaries = dict(summaries=dict())
-    for sds in sdss:
-        summaries['summaries'][sds] = np.nanmedian(np.array(stacks[sds]), 0)
+def create_timeseries_multiband_dataset(df, bands, chunks):
+    '''For a single HLS tile create a multi-date, multi-band xarray dataset'''
+    datasets = []
+    for i,row in df.iterrows():
+        try:
+            # print('loading...', row['dt'])
+            ds = create_multiband_dataset(row, bands, chunks)
+            datasets.append(ds)
+        except Exception as e:
+            print('ERROR loading, skipping acquistion!')
+            print(e)
+    DS = xr.concat(datasets, dim=pd.DatetimeIndex(df['dt'].tolist(), name='time'))
+    print('Dataset size (Gb): ', DS.nbytes/1e9)
+    return DS
 
-    # Assume profile is the same for all images in tile, may check
-    some_path = filter_subdatasets(all_paths, '01')[0]
-    summaries['model_ds'] = gdal.Open(some_path)
-
-    return summaries
+def get_mask(qa_band):
+    """Takes a data array HLS qa band and returns a mask of True where quality is good, False elsewhere
+    Mask usage:
+        ds.where(mask)
         
-def get_tile_ids(gp_df):
-    tiles = gp.read_file('data/lumonitor-eastus2/mgrs_region.shp')
-    overlapping_tiles = gp.overlay(gp_df, tiles, how="intersection")
-    return list(overlapping_tiles['GRID1MIL'] + overlapping_tiles['GRID100K'])
+    Example:
+        qa_mask = get_mask(dataset[HLSBand.QA])
+        ds = dataset.drop_vars(HLSBand.QA)
+        masked = ds.where(qa_mask)
+    """
+    def is_bad_quality(qa):
+        cirrus = 0b1
+        cloud = 0b10
+        adjacent_cloud = 0b100
+        cloud_shadow = 0b1000
+        high_aerosol = 0b11000000
 
-def get_paths(tile_id, year):
-    # For options and path structure, see https://azure.microsoft.com/en-us/services/open-datasets/catalog/hls/
-    url = "https://hlssa.blob.core.windows.net"
-    cc = ContainerClient(
-            account_url=url,
-            container_name='hls', 
-            credential="st=2019-08-07T14%3A54%3A43Z&se=2050-08-08T14%3A54%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=EYNJCexDl5yxb1TxNH%2FzILznc3TiAnJq%2FPvCumkuV5U%3D"
-            )
+        return (qa & cirrus > 0) | (qa & cloud > 0) | (qa & adjacent_cloud > 0) | \
+            (qa & cloud_shadow > 0) | (qa & high_aerosol == high_aerosol)
+    return xr.where(is_bad_quality(qa_band), False, True)  # True where is_bad_quality is False, False where is_bad_quality is True
 
-    prefix = 'hls/L309/HLS.L30.T' + tile_id + '.' + str(year)
-    return [ os.path.join(url, blob.name) for blob in cc.list_blobs(name_starts_with=prefix) ]
-
-def get_daynums(paths):
-    if not isinstance(paths, list):
-        paths = [ paths ] 
-    # Not sure this is the "safest" way to get the string
-    daynums = list(set([ os.path.basename(p)[19:22] for p in paths]))
-    if len(daynums) == 1:
-        return daynums[0]
-    else:
-        return daynums
-
-def filter_daynum(paths, daynum):
-    return [p for p in paths if get_daynums(p) == daynum ]
-
-def filter_subdatasets(paths, subdatasets):
-    if not isinstance(subdatasets, list):
-        subdatasets = [subdatasets]
-
-    suffixes = tuple([ s + '.tif' for s in subdatasets ])
-    return [ p for p in paths if p.endswith(suffixes) ]
-
-def get_mask(qa):
-    cirrus = 0b1
-    cloud = 0b10
-    adjacent_cloud = 0b100
-    cloud_shadow = 0b1000
-    high_aerosol = 0b11000000
-
-    return (qa & cirrus > 0) | (qa & cloud > 0) | (qa & adjacent_cloud > 0) | \
-        (qa & cloud_shadow > 0) | (qa & high_aerosol == high_aerosol)
-
-def create_vrt(paths, output_file):
-    # GDAL 3.2 needed for options
-    opts = gdal.BuildVRTOptions(separate=True)
-    gdal.BuildVRT(output_file, paths, options=opts)
-
-def write_array_to_tiff(array, output_path, model_ds):
-    driver = gdal.GetDriverByName('GTiff')
-    output_ds = driver.CreateCopy(output_path, model_ds, strict=0)
-    output_ds.GetRasterBand(1).WriteArray(array)
-
-    model_ds = None
-    output_ds = None
-
-
-tile_id = '16TDL'
-year = '2016'
-#output_dir = 'data/lumonitor-eastus2'
-output_dir = 'data'
-
-gdal.SetConfigOption("AZURE_SAS", "st=2019-08-07T14%3A54%3A43Z&se=2050-08-08T14%3A54%3A00Z&sp=rl&sv=2018-03-28&sr=c&sig=EYNJCexDl5yxb1TxNH%2FzILznc3TiAnJq%2FPvCumkuV5U%3D")
-gdal.SetConfigOption("AZURE_STORAGE_ACCOUNT", "hlssa")
-gdal.SetConfigOption("GTIFF_IGNORE_READ_ERRORS", "YES")
-
-summaries = get_summaries(tile_id, year)
-#for (sds, summary) in summaries['summaries'].items():
-#    output_file = os.path.join(output_dir, 
-#            tile_id + '_' + year + '_' + sds + '.tif')
-#
-#    write_array_to_tiff(summary, output_file, summaries['model_ds'])
-
+if __name__ == '__main__':
+    client = Client()
+    lookup = hls.HLSTileLookup()
+    tiles = list(lookup.get_point_hls_tile_ids(35, -111))
+    years = [ 2016 ]
+    bands = [ hls.HLSBand.COASTAL_AEROSOL, hls.HLSBand.BLUE, hls.HLSBand.GREEN,
+              hls.HLSBand.QA ]
+    
+    cat = hls.HLSCatalog.from_tiles(list(tiles), [2016], [ "01", "02", "03"], lookup)
+    chunks = { 'band':1, 'x': 366*2, 'y': 366*2 }
+    tile_ds = create_timeseries_multiband_dataset(cat.xr_ds.to_dataframe(), bands, chunks)
