@@ -58,10 +58,12 @@ if __name__ == '__main__':
     client = Client()
     lookup = hls.HLSTileLookup()
     tiles = list(lookup.get_point_hls_tile_ids(35, -111))
+    print(tiles)
     years = [ 2016 ]
     bands = [ hls.HLSBand.COASTAL_AEROSOL, hls.HLSBand.BLUE, hls.HLSBand.GREEN,
               hls.HLSBand.QA ]
     
     cat = hls.HLSCatalog.from_tiles(list(tiles), [2016], [ "01", "02", "03"], lookup)
+    print(cat.xr_ds)
     chunks = { 'band':1, 'x': 366*2, 'y': 366*2 }
     tile_ds = create_timeseries_multiband_dataset(cat.xr_ds.to_dataframe(), bands, chunks)
