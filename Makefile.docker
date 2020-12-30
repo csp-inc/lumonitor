@@ -12,7 +12,7 @@ TAG=$(DOCKER_USER)/$(PROJECT_NAME):$(DOCKER_IMG_VERSION)
 .DEFAULT_GOAL := nothing
 
 # Feel free to find a better way for this one
-nothing: Dockerfile.built
+nothing: Dockerfile.built requirements.txt
 	source src/docker/docker_shell.sh $(MAKE) $(TAG)
 
 %: Dockerfile.built
