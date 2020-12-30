@@ -1,7 +1,2 @@
-azure.storage.blob
-dask[complete]
-numpy
+earthengine-api
 pandas
-rasterio
-rtree
-xarray
