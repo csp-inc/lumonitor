@@ -1,2 +1,3 @@
 earthengine-api
 pandas
+tensorflow>=2.4.0
