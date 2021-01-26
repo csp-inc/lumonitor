@@ -1,7 +1,5 @@
 import os
 
-import tensorflow as tf
-
 import data_loader
 import model_runner
 
