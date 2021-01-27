@@ -1,6 +1,8 @@
 import os
 
 import ee
+import geopandas as gpd
+
 ee.Initialize()
 
 from HLSTileLookup import HLSTileLookup
@@ -26,9 +28,9 @@ def export_tile_for_ee_image(ee_image, xmin, ymax, epsg, tile_id, prefix):
     task.start()
 
 
-def export_tiles_for_ee_image(ee_image, bbox):
+def export_tiles_for_ee_image(ee_image, aoi):
     tile_lookup = HLSTileLookup()
-    tile_df = tile_lookup.get_bbox_hls_tile_info(*bbox)
+    tile_df = tile_lookup.get_geometry_hls_tile_info(aoi)
     for _, row in tile_df.iterrows():
         export_tile_for_ee_image(
             ee_image=ee_image,
@@ -39,10 +41,12 @@ def export_tiles_for_ee_image(ee_image, bbox):
             prefix='hm'
         )
 
+# Yes i know i will fix this
+aoi = gpd.read_file('/home/csp/Projects/thirty-by-thirty/data/aoi_conus.geojson')
 
 hm = ee.Image('projects/GEE_CSP/HM/HM_ee_2017_v014_500_30')
 nlcd_imp = ee.Image('USGS/NLCD/NLCD2016').select('impervious').divide(100).float()
 hm = hm.addBands(nlcd_imp)
 
 bbox = [-124.9, 24.4, -66.7, 49.5]
-export_tiles_for_ee_image(hm, bbox)
+export_tiles_for_ee_image(hm, aoi)
