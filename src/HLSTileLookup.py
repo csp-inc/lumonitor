@@ -21,7 +21,7 @@ class HLSTileLookup:
     def _get_extents(self):
         hls_tile_extents_url = 'https://ai4edatasetspublicassets.blob.core.windows.net/assets/S2_TilingSystem2-1.txt?st=2019-08-23T03%3A25%3A57Z&se=2028-08-24T03%3A25%3A00Z&sp=rl&sv=2018-03-28&sr=b&sig=KHNZHIJuVG2KqwpnlsJ8truIT5saih8KrVj3f45ABKY%3D'
         # Load this file into a table, where each row is:
-        # Tile ID, Xstart, Ystart, UZ, EPSG, MinLon, MaxLon, MinLon, MaxLon
+        # Tile ID, Xstart, Ystart, UZ, EPSG, MinLon, MaxLon, MinLat, MaxLat
         print('Reading tile extents...')
         s = requests.get(hls_tile_extents_url).content
         hls_tile_extents = pd.read_csv(io.StringIO(s.decode('utf-8')),delimiter=r'\s+')
@@ -31,13 +31,12 @@ class HLSTileLookup:
     def _get_boxes(self):
         return gpd.GeoDataFrame(
             self.tile_extents,
-            crs={'init': 'epsg:4326'},
+            crs="EPSG:4326",
             geometry=[
                 box(r['MinLon'], r['MinLat'], r['MaxLon'], r['MaxLat'])
                 for _, r in self.tile_extents.iterrows()
             ]
         )
-
 
     def get_point_hls_tile_ids(self, lat, lon):
         results = list(self.tree_idx.intersection((lon, lat, lon, lat)))
@@ -53,14 +52,17 @@ class HLSTileLookup:
         tiles_in_aoi = gpd.overlay(geometry, self.tile_gpd, how='intersection')
         return set(tiles_in_aoi['TilID'])
 
+    def get_hls_tile_info(self, tile_ids):
+        return self.tile_extents[self.tile_extents['TilID'].isin(tile_ids)]
+
     def get_point_hls_tile_info(self, lat, lon):
         tile_ids = self.get_point_hls_tile_ids(lat, lon)
-        return self.tile_extents[self.tile_extents['TilID'].isin(tile_ids)]
+        return self.get_hls_tile_info(tile_ids)
 
     def get_bbox_hls_tile_info(self, left, bottom, right, top):
         tile_ids = self.get_bbox_hls_tile_ids(left, bottom, right, top)
-        return self.tile_extents[self.tile_extents['TilID'].isin(tile_ids)]
+        return self.get_hls_tile_info(tile_ids)
 
     def get_geometry_hls_tile_info(self, geometry):
         tile_ids = self.get_geometry_hls_tile_ids(geometry)
-        return self.tile_extents[self.tile_extents['TilID'].isin(tile_ids)]
+        return self.get_hls_tile_info(tile_ids)
