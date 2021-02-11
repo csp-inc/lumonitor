@@ -15,21 +15,22 @@ class StreamingDataset(IterableDataset):
         for file in self.files:
             yield(file[0], file[1])
 
-
     def stream_chips(self):
 
         for imagery_file, label_file in self.files:
-            for _ in range(self.num_chips_per_tile):
-                img_ds = xr.open_zarr(imagery_file)
-                label_ds = xr.open_rasterio(label_file)
 
-                x = np.random.randint(0, img_ds.dims['x'] - self.chip_size - 1)
-                y = np.random.randint(0, img_ds.dims['y'] - self.chip_size - 1)
+            img_ds = xr.open_rasterio(imagery_file)
+            label_ds = xr.open_rasterio(label_file)
+
+            for _ in range(self.num_chips_per_tile):
+                x = np.random.randint(0, img_ds.sizes['x'] - self.chip_size)
+                y = np.random.randint(0, img_ds.sizes['y'] - self.chip_size)
                 x_cells = range(x, x + self.chip_size)
                 y_cells = range(y, y + self.chip_size)
 
                 cells = dict(x=x_cells, y=y_cells)
-                img_chip = img_ds[cells].to_array().values.squeeze()
+#                img_chip = img_ds[cells].to_array().values.squeeze()
+                img_chip = img_ds[cells].values
                 label_chip = label_ds[cells].sel(band=1).values
 
                 yield img_chip, label_chip

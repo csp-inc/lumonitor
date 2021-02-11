@@ -49,4 +49,3 @@ class Unet(nn.Module):
         decoder1 = decoder_block(decoder2, encoder1, 64)  # 128
         decoder0 = decoder_block(decoder1, encoder0, 32)  # 256
         outputs = layers.Conv2D(1, (1, 1), activation='sigmoid')(decoder0)
-
