@@ -5,7 +5,14 @@ from torch.utils.data.dataset import IterableDataset
 
 class StreamingDataset(IterableDataset):
 
-    def __init__(self, imagery_files, label_files, label_band, chip_size=256, num_chips_per_tile=200):
+    def __init__(
+        self,
+        imagery_files,
+        label_files,
+        label_band,
+        chip_size=256,
+        num_chips_per_tile=200
+    ):
         self.files = list(zip(imagery_files, label_files))
 
         self.chip_size = chip_size
