@@ -47,11 +47,13 @@ def export_tiles_for_aoi(ee_image, aoi):
 
 def export_tiles_for_tile_ids(ee_image, tile_ids):
     tile_lookup = HLSTileLookup()
-    tile_df = tile_lookup.get_tile_info(tile_ids)
+    tile_df = tile_lookup.get_hls_tile_info(tile_ids)
     export_tiles(ee_image, tile_df)
 
-zarrs = [os.path.join('hls_tmp', f) for f in os.listdir('hls_tmp') if f.endswith('zarr')]
-tile_ids = [xr.open_zarr(f).attrs['SENTINEL2_TILEID'] for f in zarrs]
+
+cog_dir = 'data/cog/2016'
+cogs = [os.path.join(cog_dir, f) for f in os.listdir(cog_dir)]
+tile_ids = [os.path.splitext(os.path.basename(f))[0] for f in cogs]
 
 hm = ee.Image('projects/GEE_CSP/HM/HM_ee_2017_v014_500_30')
 nlcd_imp = ee.Image('USGS/NLCD/NLCD2016').select('impervious').divide(100).float()

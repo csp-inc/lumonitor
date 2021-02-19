@@ -6,12 +6,12 @@ from torch.utils.data.dataset import IterableDataset
 class StreamingDataset(IterableDataset):
 
     def __init__(
-        self,
-        imagery_files,
-        label_files,
-        label_band,
-        chip_size=256,
-        num_chips_per_tile=200
+            self,
+            imagery_files,
+            label_files,
+            label_band,
+            chip_size=256,
+            num_chips_per_tile=200
     ):
         self.files = list(zip(imagery_files, label_files))
 
@@ -36,7 +36,6 @@ class StreamingDataset(IterableDataset):
                 y_cells = range(y, y + self.chip_size)
 
                 cells = dict(x=x_cells, y=y_cells)
-#                img_chip = img_ds[cells].to_array().values.squeeze()
                 img_chip = img_ds[cells].values
                 label_chip = label_ds[cells].sel(band=1).values
 
