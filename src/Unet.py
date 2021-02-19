@@ -30,7 +30,7 @@ def decoder_block(in_channels, out_channels, x, concatter):
     return conv_block(in_channels, out_channels)(decoder)
 
 class Unet(torch.nn.Module):
-    def __init__(self, x):
+    def __init__(self, in_channels):
         super(Unet, self).__init__()
         self.in_channels = in_channels
 
