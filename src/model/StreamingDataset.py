@@ -26,8 +26,10 @@ class StreamingDataset(IterableDataset):
 
         for imagery_file, label_file in self.files:
 
-            img_ds = xr.open_rasterio(imagery_file)
-            label_ds = xr.open_rasterio(label_file)
+            # Not sure about best ops here for performance. 
+            # chunks of 3660? just use cache?
+            img_ds = xr.open_rasterio(imagery_file, cache=True).fillna(0)
+            label_ds = xr.open_rasterio(label_file, cache=True).fillna(0)
 
             for _ in range(self.num_chips_per_tile):
                 x = np.random.randint(0, img_ds.sizes['x'] - self.chip_size)
@@ -37,7 +39,7 @@ class StreamingDataset(IterableDataset):
 
                 cells = dict(x=x_cells, y=y_cells)
                 img_chip = img_ds[cells].values
-                label_chip = label_ds[cells].sel(band=1).values
+                label_chip = label_ds[cells].sel(band=6).values
 
                 yield img_chip, label_chip
 

@@ -87,6 +87,7 @@ termcolor==1.1.0
 tfrecord-lite==0.0.7
 toolz==0.11.1
 torch==1.7.1
+torchinfo
 typing-extensions==3.7.4.3
 uritemplate==3.0.1
 urllib3==1.26.2
