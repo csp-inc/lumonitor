@@ -4,25 +4,39 @@ ifneq (,$(wildcard ./.env))
     export
 endif
 
-VPATH=src/:data/
+DATA=data/
+BLOB_DIR=$(DATA)blobs
+COG_DIR=$(DATA)cog
+
+VPATH=src/:$(DATA):$(BLOB_DIR):$(COG_DIR)
 SHELL=/usr/bin/env bash
-BUCKET=gs://lumonitor/
 
-data/training_data.azfs: training_data.gcs
-	source src/copy_from_gcs_to_azfs.sh $(BUCKET)sample_data* lumonitor
+BLOBS=$(shell az storage blob list --delimiter 'zarr' -c hls --account-key=$(AZURE_EASTUS2_STORAGE_KEY) --account-name=lumonitoreastus2 -o tsv | tr '\n' ' ')
+$(INFO $(BLOBS))
+
+#GCS=$(shell gsutil ls gs://lumonitor/hls_tiles/)
+
+#GCS_PLACEHOLDERS=$(patsubst %,data/blobs/%.blob, $(notdir $(GCS)))
+#LABEL_COGS=$(patsubst %.blob,%, $(GCS_PLACEHOLDERS))
+
+BLOB_PLACEHOLDERS=$(patsubst %,data/blobs/%.blob, $(BLOBS))
+FEATURE_COGS=$(patsubst data/blobs/%.zarr.blob,data/cog/%.tif, $(BLOB_PLACEHOLDERS))
+$(info $(FEATURE_COGS))
+
+.PHONY: all
+all: $(FEATURE_COGS)
+
+$(BLOB_PLACEHOLDERS): %:
+$(FEATURE_COGS): %.tif: | %.zarr.blob
+
+data/cog/%.tif: data/blobs/%.tif.gcs
+
+data/cog/%.tif: data/blobs/%.zarr.blob
+	python3 src/utils/zarr_to_cog.py az://hls/$*.zarr $@ --account-name=$(AZURE_EASTUS2_STORAGE_ACCOUNT) --account-key=$(AZURE_EASTUS2_STORAGE_KEY)
+
+data/%.gcs:
 	touch $@
 
-data/training_data.gcs: get_training_data.py training_points.ee
-	python $^
+data/%.blob: 
 	touch $@
 
-data/training_points.ee: training_points.csv
-	gsutil cp $^ $(BUCKET)
-	earthengine upload table -f -w --x_column lon --y_column lat --asset_id users/jesse/lumonitor/training_points $(BUCKET)$(notdir $^)
-	touch $@
-
-data/training_points.csv: make_training_points.R aoi.gpkg
-	Rscript $^ $@
-
-data/aoi.gpkg: make_aoi.sh
-	source $^ $@

@@ -19,5 +19,5 @@ nothing: Dockerfile.built requirements.txt
 	source src/docker/docker_shell.sh $(MAKE) $@ $(TAG)
 	
 # Result is a dummy file that should NOT be in versioning.
-%.built: %
+%.built: % requirements.txt
 	source src/docker/build_docker_image.sh $< $(TAG) $@
