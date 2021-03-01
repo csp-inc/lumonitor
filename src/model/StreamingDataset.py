@@ -1,6 +1,7 @@
 import numpy as np
 
 import xarray as xr
+import torch
 from torch.utils.data.dataset import IterableDataset
 
 class StreamingDataset(IterableDataset):
@@ -9,27 +10,46 @@ class StreamingDataset(IterableDataset):
             self,
             imagery_files,
             label_files,
-            label_band,
+            label_band=6,
             chip_size=256,
             num_chips_per_tile=200
     ):
         self.files = list(zip(imagery_files, label_files))
 
+        self.label_band = label_band
         self.chip_size = chip_size
         self.num_chips_per_tile = num_chips_per_tile
 
     def stream_tiles(self):
-        for file in self.files:
-            yield(file[0], file[1])
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            worker_id = 0
+            num_workers = 1
+        else:
+            worker_id = worker_info.id
+            num_workers = worker_info.num_workers
+
+        if worker_id == 0:
+            np.random.shuffle(self.files)
+
+# This logic splits up the list of filenames into `num_workers` chunks. Each worker will recieve ceil(num_filenames / num_workers) filenames to generate chips from. If the number of workers doesn't divide the number of filenames evenly then the last worker will have fewer filenames.
+        N = len(self.files)
+        num_files_per_worker = int(np.ceil(N / num_workers))
+        lower_idx = worker_id * num_files_per_worker
+        upper_idx = min(N, (worker_id+1) * num_files_per_worker)
+        for idx in range(lower_idx, upper_idx):
+            img_fn, label_fn = self.files[idx]
+            yield (img_fn, label_fn)
 
     def stream_chips(self):
 
-        for imagery_file, label_file in self.files:
+        for imagery_file, label_file in self.stream_tiles():
 
             # Not sure about best ops here for performance. 
             # chunks of 3660? just use cache?
-            img_ds = xr.open_rasterio(imagery_file, cache=True).fillna(0)
-            label_ds = xr.open_rasterio(label_file, cache=True).fillna(0)
+            # ^^^ See Caleb's code where he discusses this I think
+            img_ds = xr.open_rasterio(imagery_file).fillna(0)
+            label_ds = xr.open_rasterio(label_file).fillna(0)
 
             for _ in range(self.num_chips_per_tile):
                 x = np.random.randint(0, img_ds.sizes['x'] - self.chip_size)
@@ -39,7 +59,7 @@ class StreamingDataset(IterableDataset):
 
                 cells = dict(x=x_cells, y=y_cells)
                 img_chip = img_ds[cells].values
-                label_chip = label_ds[cells].sel(band=6).values
+                label_chip = label_ds[cells].sel(band=self.label_band).values
 
                 yield img_chip, label_chip
 

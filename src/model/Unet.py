@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torch.nn.functional import interpolate
 
 def conv_block(in_channels, out_channels):
     return nn.Sequential(
@@ -12,12 +13,9 @@ def conv_block(in_channels, out_channels):
     )
 
 def decoder_block(in_channels, out_channels):
-    return nn.ConvTranspose2d(
-        in_channels,
-        out_channels,
-        kernel_size=(2, 2),
-        stride=(2, 2),
-        padding=0
+    return nn.Sequential(
+        nn.Upsample(scale_factor=2),
+        nn.Conv2d(in_channels, out_channels, 3, padding=1)
     )
 
 def norm_relu(in_channels, out_channels):
@@ -67,6 +65,8 @@ class Unet(torch.nn.Module):
         decoder_4 = self.decoder_block_4(x)
         x = self.post_decoder_4(torch.cat((decoder_4, encoder_4), dim=1))
         decoder_3 = self.decoder_block_3(x)
+        print(decoder_3.shape)
+        print(encoder_3.shape)
         x = self.post_decoder_3(torch.cat((decoder_3, encoder_3), dim=1))
         decoder_2 = self.decoder_block_2(x)
         x = self.post_decoder_2(torch.cat((decoder_2, encoder_2), dim=1))

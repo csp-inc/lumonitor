@@ -10,7 +10,7 @@ import xarray as xr
 from StreamingDataset import StreamingDataset
 from Unet import Unet
 
-cog_dir = 'data/cog/2016'
+cog_dir = 'data/cog/2016/training'
 image_files = [
     os.path.join(cog_dir, f)
     for f in os.listdir(cog_dir)
@@ -23,11 +23,18 @@ label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in tiles]
 szd = StreamingDataset(
     image_files,
     label_files,
-    label_band='impervious',
-    num_chips_per_tile=200
+    label_band=1,
+    num_chips_per_tile=500
 )
 
-loader = DataLoader(szd)
+BATCH_SIZE = 25
+
+loader = DataLoader(
+    szd,
+    num_workers=2,
+    batch_size=BATCH_SIZE,
+    pin_memory=True
+)
 
 if torch.cuda.is_available():
     dev = "cuda:0"
@@ -39,10 +46,9 @@ net = net.float().to(dev)
 
 criterion = nn.MSELoss()
 optimizer = optim.SGD(net.parameters(), lr=0.01)
-epochs = 1
+epochs = 8
 
 for epoch in range(epochs):
-
     running_loss = 0.0
     for i, data in enumerate(loader):
         inputs, labels = data
@@ -51,11 +57,15 @@ for epoch in range(epochs):
         optimizer.zero_grad()
 
         outputs = net(inputs.float())
-        loss = criterion(outputs, labels)
+        # ????
+        loss = criterion(outputs.squeeze(1), labels)
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-        if i % 100 == 99:
+        # ????
+        if i % BATCH_SIZE == BATCH_SIZE - 1: 
             print('[%d, %5d] loss: %.3f' %
-                  (epoch + 1, i + 1, running_loss / 100))
+                  (epoch + 1, i + 1, running_loss / BATCH_SIZE))
             running_loss = 0.0
+
+torch.save(net.state_dict(), 'data/hall_model3.pt')
