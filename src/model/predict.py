@@ -5,6 +5,7 @@ import re
 import xarray as xr
 import rioxarray
 import torch
+import torchvision.transforms.functional as tvF
 
 from Unet import Unet
 
@@ -15,13 +16,20 @@ image_files = [
     if not f.startswith('hm')
 ]
 
-model_file = 'data/hall_model3.pt'
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+
+model_file = 'data/hall_model5.pt'
 model = Unet(7)
 model.load_state_dict(torch.load(model_file))
-# Does this do anything freal?
+net = model.float().to(dev)
 model.eval()
 
-chip_size = 2049
+chip_size = 512
+output_size = 70
+padding = math.ceil((chip_size - output_size) / 2)
 
 def get_one_band_copy(ds):
     ods = ds.copy(deep=True).sel(band=[1])
@@ -35,35 +43,34 @@ def get_output_file(input_file):
     output_dir = 'data/cog/2016/prediction'
     return os.path.join(output_dir, os.path.basename(output_file))
 
-
 for image_file in image_files:
     img_ds = xr.open_rasterio(image_file).fillna(0)
     output_ds = get_one_band_copy(img_ds)
+    img_ds = torch.tensor(img_ds.values)
 
-    n_rows = img_ds.sizes['x']
-    n_cols = img_ds.sizes['y']
-    n_chip_rows = math.ceil(n_rows / chip_size)
-    n_chip_cols = math.ceil(n_cols / chip_size)
+    n_rows = img_ds.shape[1]
+    n_cols = img_ds.shape[2]
+    n_chip_rows = math.ceil(n_rows / output_size)
+    n_chip_cols = math.ceil(n_cols / output_size)
 
     for row in range(n_chip_rows):
         for col in range(n_chip_cols):
-            xmin = 0 + row * chip_size
+            xmin = 0 + row * output_size
             xmax = xmin + chip_size
             if xmax > n_rows:
                 xmax = n_rows
                 xmin = xmax - chip_size
 
-            ymin = 0 + col * chip_size
+            ymin = 0 + col * output_size
             ymax = ymin + chip_size
             if ymax > n_cols:
                 ymax = n_cols
                 ymin = ymax - chip_size
 
-            cells = dict(x=range(xmin, xmax), y=range(ymin, ymax))
-            input_data = torch.Tensor(img_ds[cells].values).unsqueeze(0)
-            print(input_data.shape)
-            output_data = model(input_data)
-            output_ds[cells] = output_data.detach().numpy()
+            input_data = img_ds[:, xmin:xmax, ymin:ymax].unsqueeze(0)
+#            input_data = tvF.pad(input_data, math.ceil(buffer / 2))
+            output_data = model(input_data.float().to(dev))
+            output_ds[:, xmin+padding:xmax-padding, ymin+padding:ymax-padding] = output_data.detach().cpu().numpy()
 
     output_file = get_output_file(image_file)
     print(output_file)

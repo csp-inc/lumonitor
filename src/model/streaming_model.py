@@ -1,4 +1,6 @@
+import math
 import os
+import random
 import re
 
 import torch
@@ -17,21 +19,56 @@ image_files = [
     if not f.startswith('hm')
 ]
 
-tiles = [os.path.splitext(os.path.basename(f))[0] for f in image_files]
+random.shuffle(image_files)
+n_training_files = math.ceil(len(image_files) * 0.8)
+
+training_files = image_files[:n_training_files]
+tiles = [os.path.splitext(os.path.basename(f))[0] for f in training_files]
 label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in tiles]
 
+test_files = image_files[n_training_files:]
+test_tiles = [os.path.splitext(os.path.basename(f))[0] for f in test_files]
+test_label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in test_tiles]
+
+
+# Can go ~25 w/ zero padding, ~16 w/ reflect
+BATCH_SIZE = 18
+N_CHIPS_PER_TILE = 200
+EPOCHS = 40
+N_TILES = len(tiles)
+N_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TILES
+
+N_TEST_TILES = len(test_files)
+N_TEST_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TEST_TILES
+
 szd = StreamingDataset(
-    image_files,
+    training_files,
     label_files,
     label_band=1,
-    num_chips_per_tile=500
+    feature_chip_size=512,
+    label_chip_size=70,
+    num_chips_per_tile=N_CHIPS_PER_TILE
 )
-
-BATCH_SIZE = 25
 
 loader = DataLoader(
     szd,
-    num_workers=2,
+    num_workers=3,
+    batch_size=BATCH_SIZE,
+    pin_memory=True
+)
+
+testsd = StreamingDataset(
+        test_files,
+        label_files,
+        label_band=1,
+        feature_chip_size=512,
+        label_chip_size=70,
+        num_chips_per_tile=N_CHIPS_PER_TILE
+)
+
+test_loader = DataLoader(
+    testsd,
+    num_workers=3,
     batch_size=BATCH_SIZE,
     pin_memory=True
 )
@@ -45,27 +82,41 @@ net = Unet(7)
 net = net.float().to(dev)
 
 criterion = nn.MSELoss()
-optimizer = optim.SGD(net.parameters(), lr=0.01)
-epochs = 8
+optimizer = optim.SGD(net.parameters(), lr=1e-2)
 
-for epoch in range(epochs):
+for epoch in range(EPOCHS):
     running_loss = 0.0
+    test_running_loss = 0.0
     for i, data in enumerate(loader):
+        net.train()
         inputs, labels = data
         inputs = inputs.to(dev)
         labels = labels.to(dev)
         optimizer.zero_grad()
 
         outputs = net(inputs.float())
-        # ????
         loss = criterion(outputs.squeeze(1), labels)
         loss.backward()
         optimizer.step()
-        running_loss += loss.item()
-        # ????
-        if i % BATCH_SIZE == BATCH_SIZE - 1: 
-            print('[%d, %5d] loss: %.3f' %
-                  (epoch + 1, i + 1, running_loss / BATCH_SIZE))
-            running_loss = 0.0
+        running_loss += loss.item() * BATCH_SIZE
+    # Clear these off GPU so we can load up test data
+    inputs.detach()
+    labels.detach()
+    print('Epoch %d loss: %.3f' %
+          (epoch + 1, running_loss / N_SAMPLES_PER_EPOCH))
 
-torch.save(net.state_dict(), 'data/hall_model3.pt')
+    with torch.no_grad():
+        for i, test_data in enumerate(test_loader):
+            net.eval()
+            inputs, labels = test_data
+            inputs = inputs.to(dev)
+            labels = labels.to(dev)
+            outputs = net(inputs.float())
+            loss = criterion(outputs.squeeze(1), labels)
+            test_running_loss += loss.item() * BATCH_SIZE
+
+    print('Epoch %d test loss: %.3f' %
+          (epoch + 1, test_running_loss / N_TEST_SAMPLES_PER_EPOCH))
+
+
+torch.save(net.state_dict(), 'data/hall_model6.pt')

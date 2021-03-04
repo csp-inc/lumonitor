@@ -11,13 +11,15 @@ class StreamingDataset(IterableDataset):
             imagery_files,
             label_files,
             label_band=6,
-            chip_size=256,
+            feature_chip_size=256,
+            label_chip_size=256,
             num_chips_per_tile=200
     ):
         self.files = list(zip(imagery_files, label_files))
 
         self.label_band = label_band
-        self.chip_size = chip_size
+        self.feature_chip_size = feature_chip_size
+        self.label_chip_size = label_chip_size
         self.num_chips_per_tile = num_chips_per_tile
 
     def stream_tiles(self):
@@ -45,21 +47,21 @@ class StreamingDataset(IterableDataset):
 
         for imagery_file, label_file in self.stream_tiles():
 
-            # Not sure about best ops here for performance. 
-            # chunks of 3660? just use cache?
-            # ^^^ See Caleb's code where he discusses this I think
             img_ds = xr.open_rasterio(imagery_file).fillna(0)
             label_ds = xr.open_rasterio(label_file).fillna(0)
 
             for _ in range(self.num_chips_per_tile):
-                x = np.random.randint(0, img_ds.sizes['x'] - self.chip_size)
-                y = np.random.randint(0, img_ds.sizes['y'] - self.chip_size)
-                x_cells = range(x, x + self.chip_size)
-                y_cells = range(y, y + self.chip_size)
-
+                x = np.random.randint(0, img_ds.sizes['x'] - self.feature_chip_size)
+                y = np.random.randint(0, img_ds.sizes['y'] - self.feature_chip_size)
+                x_cells = range(x, x + self.feature_chip_size)
+                y_cells = range(y, y + self.feature_chip_size)
                 cells = dict(x=x_cells, y=y_cells)
                 img_chip = img_ds[cells].values
-                label_chip = label_ds[cells].sel(band=self.label_band).values
+
+                label_x_cells = range(x, x + self.label_chip_size)
+                label_y_cells = range(y, y + self.label_chip_size)
+                label_cells = dict(x=label_x_cells, y=label_y_cells)
+                label_chip = label_ds[label_cells].sel(band=self.label_band).values
 
                 yield img_chip, label_chip
 
