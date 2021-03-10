@@ -33,7 +33,7 @@ test_label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in test_tile
 
 # Can go ~25 w/ zero padding, ~16 w/ reflect
 BATCH_SIZE = 18
-N_CHIPS_PER_TILE = 200
+N_CHIPS_PER_TILE = 500
 EPOCHS = 40
 N_TILES = len(tiles)
 N_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TILES

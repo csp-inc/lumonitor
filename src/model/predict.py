@@ -21,7 +21,7 @@ if torch.cuda.is_available():
 else:
     dev = "cpu"
 
-model_file = 'data/hall_model5.pt'
+model_file = 'data/hall_model6.pt'
 model = Unet(7)
 model.load_state_dict(torch.load(model_file))
 net = model.float().to(dev)
