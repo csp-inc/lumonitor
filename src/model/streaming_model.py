@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 import xarray as xr
 
-from StreamingDataset import StreamingDataset
+from LuDataset import LuDataset
 from Unet import Unet
 
 cog_dir = 'data/cog/2016/training'
@@ -30,19 +30,18 @@ test_files = image_files[n_training_files:]
 test_tiles = [os.path.splitext(os.path.basename(f))[0] for f in test_files]
 test_label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in test_tiles]
 
-
 # Can go ~25 w/ zero padding, ~16 w/ reflect
 BATCH_SIZE = 18
 N_CHIPS_PER_TILE = 500
 EPOCHS = 40
 N_TILES = len(tiles)
 N_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TILES
-N_WORKERS = 8
+N_WORKERS = 3
 
 N_TEST_TILES = len(test_files)
 N_TEST_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TEST_TILES
 
-szd = StreamingDataset(
+szd = LuDataset(
     training_files,
     label_files,
     label_band=1,
@@ -58,7 +57,7 @@ loader = DataLoader(
     pin_memory=True
 )
 
-testsd = StreamingDataset(
+testsd = LuDataset(
         test_files,
         label_files,
         label_band=1,
@@ -97,7 +96,7 @@ for epoch in range(EPOCHS):
         optimizer.zero_grad()
 
         outputs = net(inputs.float())
-        loss = criterion(outputs.squeeze(1), labels)
+        loss = criterion(outputs.squeeze(1), labels.float())
         loss.backward()
         optimizer.step()
         running_loss += loss.item() * BATCH_SIZE
@@ -114,7 +113,7 @@ for epoch in range(EPOCHS):
             inputs = inputs.to(dev)
             labels = labels.to(dev)
             outputs = net(inputs.float())
-            loss = criterion(outputs.squeeze(1), labels)
+            loss = criterion(outputs.squeeze(1), labels.float())
             test_running_loss += loss.item() * BATCH_SIZE
 
     print('Epoch %d test loss: %.3f' %

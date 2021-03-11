@@ -5,8 +5,10 @@ import rioxarray as rioxr
 import torch
 from torch.utils.data.dataset import IterableDataset
 
+import dask
+
 def read_tile(path, chunks):
-    return rioxr.open_rasterio(path, chunks=chunks).fillna(0)
+    return rioxr.open_rasterio(path, chunks=chunks, lock=False).fillna(0)
 
 class StreamingDataset(IterableDataset):
 
@@ -19,7 +21,7 @@ class StreamingDataset(IterableDataset):
             label_chip_size=256,
             num_chips_per_tile=200
     ):
-        chunks = 256
+        chunks = (-1, 256, 256)
         self.imagery_das = [read_tile(f, chunks) for f in imagery_files]
         self.label_das = [read_tile(f, chunks) for f in label_files]
 
