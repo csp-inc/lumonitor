@@ -1,3 +1,5 @@
 torch
 xarray
 rasterio
+torchvision
+dask[complete]

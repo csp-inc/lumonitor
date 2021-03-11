@@ -37,6 +37,7 @@ N_CHIPS_PER_TILE = 500
 EPOCHS = 40
 N_TILES = len(tiles)
 N_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TILES
+N_WORKERS = 8
 
 N_TEST_TILES = len(test_files)
 N_TEST_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TEST_TILES
@@ -52,7 +53,7 @@ szd = StreamingDataset(
 
 loader = DataLoader(
     szd,
-    num_workers=3,
+    num_workers=N_WORKERS,
     batch_size=BATCH_SIZE,
     pin_memory=True
 )
@@ -68,7 +69,7 @@ testsd = StreamingDataset(
 
 test_loader = DataLoader(
     testsd,
-    num_workers=3,
+    num_workers=N_WORKERS,
     batch_size=BATCH_SIZE,
     pin_memory=True
 )
@@ -88,6 +89,7 @@ for epoch in range(EPOCHS):
     running_loss = 0.0
     test_running_loss = 0.0
     for i, data in enumerate(loader):
+        print(i)
         net.train()
         inputs, labels = data
         inputs = inputs.to(dev)
