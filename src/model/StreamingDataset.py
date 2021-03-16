@@ -1,14 +1,10 @@
 import numpy as np
 
-import xarray as xr
-import rioxarray as rioxr
+import rasterio as rio
+from rasterio.windows import Window
 import torch
 from torch.utils.data.dataset import IterableDataset
-
-import dask
-
-def read_tile(path, chunks):
-    return rioxr.open_rasterio(path, chunks=chunks, lock=False).fillna(0)
+from torchvision.transforms.functional import center_crop
 
 class StreamingDataset(IterableDataset):
 
@@ -21,9 +17,8 @@ class StreamingDataset(IterableDataset):
             label_chip_size=256,
             num_chips_per_tile=200
     ):
-        chunks = (-1, 256, 256)
-        self.imagery_das = [read_tile(f, chunks) for f in imagery_files]
-        self.label_das = [read_tile(f, chunks) for f in label_files]
+        self.imagery_files = imagery_files
+        self.label_files = label_files
 
         self.label_band = label_band
         self.feature_chip_size = feature_chip_size
@@ -35,21 +30,26 @@ class StreamingDataset(IterableDataset):
     def stream_chips(self):
         for i in range(self.num_samples):
             tile_index = np.random.randint(self.num_tiles)
-            img_ds = self.imagery_das[tile_index]
-            label_ds = self.label_das[tile_index]
-            x = np.random.randint(0, img_ds.sizes['x'] - self.feature_chip_size)
-            y = np.random.randint(0, img_ds.sizes['y'] - self.feature_chip_size)
-            x_cells = range(x, x + self.feature_chip_size)
-            y_cells = range(y, y + self.feature_chip_size)
-            cells = dict(x=x_cells, y=y_cells)
-            img_chip = img_ds[cells].values
+            img_ds = rio.open(self.imagery_files[tile_index])
+            label_ds = rio.open(self.label_files[tile_index])
+            x = np.random.randint(0, img_ds.shape[0] - self.feature_chip_size)
+            y = np.random.randint(0, img_ds.shape[1] - self.feature_chip_size)
+            window = Window(
+                x,
+                y,
+                self.feature_chip_size,
+                self.feature_chip_size
+            )
 
-            label_x_cells = range(x, x + self.label_chip_size)
-            label_y_cells = range(y, y + self.label_chip_size)
-            label_cells = dict(x=label_x_cells, y=label_y_cells)
-            label_chip = label_ds[label_cells].sel(band=self.label_band).values
-
-            yield img_chip, label_chip
+            img_chip = img_ds.read(range(1,8), window=window)
+            label_chip = center_crop(
+                torch.Tensor(label_ds.read(self.label_band, window=window)),
+                self.label_chip_size
+            )
+            yield (
+                np.nan_to_num(img_chip, False),
+                np.nan_to_num(label_chip, False)
+            )
 
     def __iter__(self):
         return iter(self.stream_chips())
