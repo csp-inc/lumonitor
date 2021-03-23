@@ -1,14 +1,13 @@
 import torch
 import torch.nn as nn
 from torch.nn.functional import interpolate
-from torchvision.transforms.functional import center_crop
 
 def conv_block(in_channels, out_channels):
     return nn.Sequential(
-        nn.Conv2d(in_channels, out_channels, 3, padding=0),
+        nn.Conv2d(in_channels, out_channels, 3, padding=1),
         nn.BatchNorm2d(out_channels),
         nn.ReLU(inplace=True),
-        nn.Conv2d(out_channels, out_channels, 3, padding=0),
+        nn.Conv2d(out_channels, out_channels, 3, padding=1),
         nn.BatchNorm2d(out_channels),
         nn.ReLU(inplace=True)
     )
@@ -16,7 +15,7 @@ def conv_block(in_channels, out_channels):
 def decoder_block(in_channels, out_channels):
     return nn.Sequential(
         nn.Upsample(scale_factor=2),
-        nn.Conv2d(in_channels, out_channels, 3, padding=0)
+        nn.Conv2d(in_channels, out_channels, 3, padding=1)
     )
 
 def norm_relu(in_channels, out_channels):
@@ -52,7 +51,7 @@ class Unet(torch.nn.Module):
         )
 
     def forward(self, x):
-        encoder_0 = self.encoder_block_0(x.float())
+        encoder_0 = self.encoder_block_0(x)
         x = nn.MaxPool2d(2)(encoder_0)
         encoder_1 = self.encoder_block_1(x)
         x = nn.MaxPool2d(2)(encoder_1)
@@ -64,18 +63,13 @@ class Unet(torch.nn.Module):
         x = nn.MaxPool2d(2)(encoder_4)
         x = self.center(x)
         decoder_4 = self.decoder_block_4(x)
-        encoder_4 = center_crop(encoder_4, decoder_4.shape[2])
         x = self.post_decoder_4(torch.cat((decoder_4, encoder_4), dim=1))
         decoder_3 = self.decoder_block_3(x)
-        encoder_3 = center_crop(encoder_3, decoder_3.shape[2])
         x = self.post_decoder_3(torch.cat((decoder_3, encoder_3), dim=1))
         decoder_2 = self.decoder_block_2(x)
-        encoder_2 = center_crop(encoder_2, decoder_2.shape[2])
         x = self.post_decoder_2(torch.cat((decoder_2, encoder_2), dim=1))
         decoder_1 = self.decoder_block_1(x)
-        encoder_1 = center_crop(encoder_1, decoder_1.shape[2])
         x = self.post_decoder_1(torch.cat((decoder_1, encoder_1), dim=1))
         decoder_0 = self.decoder_block_0(x)
-        encoder_0 = center_crop(encoder_0, decoder_0.shape[2])
         x = self.post_decoder_0(torch.cat((decoder_0, encoder_0), dim=1))
-        return self.output(x).squeeze(0).squeeze(1)
+        return self.output(x).squeeze(0)

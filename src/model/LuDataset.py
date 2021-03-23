@@ -1,8 +1,7 @@
 import numpy as np
 
-import xarray as xr
-import rioxarray as rioxr
-import torch
+import rasterio as rio
+from rasterio.windows import Window
 from torch.utils.data.dataset import Dataset
 
 class LuDataset(Dataset):
@@ -15,8 +14,8 @@ class LuDataset(Dataset):
             label_chip_size=256,
             num_chips_per_tile=200
     ):
-        self.imagery_das = [self.read_tile(f) for f in imagery_files]
-        self.label_das = [self.read_tile(f) for f in label_files]
+        self.imagery_files = imagery_files
+        self.label_files = label_files
 
         self.label_band = label_band
         self.feature_chip_size = feature_chip_size
@@ -25,28 +24,31 @@ class LuDataset(Dataset):
 
         self.num_chips = num_chips_per_tile * len(imagery_files)
 
+    def __center_crop(self, window, size):
+        col_off = window.col_off + window.width // 2 - (size // 2)
+        row_off = window.row_off + window.height // 2 - (size // 2)
+        return Window(col_off, row_off, size, size)
+
     def __getitem__(self, idx):
         tile_idx = int(idx / self.num_chips_per_tile)
+        img_ds = rio.open(self.imagery_files[tile_idx])
+        label_ds = rio.open(self.label_files[tile_idx])
 
-        img_ds = self.imagery_das[tile_idx]
-        x = np.random.randint(0, img_ds.sizes['x'] - self.feature_chip_size)
-        y = np.random.randint(0, img_ds.sizes['y'] - self.feature_chip_size)
+        x = np.random.randint(0, img_ds.shape[0] - self.feature_chip_size)
+        y = np.random.randint(0, img_ds.shape[1] - self.feature_chip_size)
+        window = Window(
+            x,
+            y,
+            self.feature_chip_size,
+            self.feature_chip_size
+        )
+        img_chip = img_ds.read(range(1, 8), window=window)
 
-        img_x_cells = range(x, x + self.feature_chip_size)
-        img_y_cells = range(y, y + self.feature_chip_size)
-        cells = dict(x=img_x_cells, y=img_y_cells)
-        img_chip = img_ds[cells].values
-
-        label_ds = self.imagery_das[tile_idx]
-        label_x_cells = range(x, x + self.label_chip_size)
-        label_y_cells = range(y, y + self.label_chip_size)
-        label_cells = dict(x=label_x_cells, y=label_y_cells)
-        label_chip = label_ds[label_cells].sel(band=self.label_band).values
-
-        return img_chip, label_chip
-
+        label_window = self.__center_crop(window, self.label_chip_size)
+        label_chip = label_ds.read(self.label_band, window=label_window)
+        return (
+            np.nan_to_num(img_chip, False),
+            np.nan_to_num(label_chip, False)
+        )
     def __len__(self):
         return self.num_chips
-
-    def read_tile(self, path, chunks=256):
-        return rioxr.open_rasterio(path, chunks=(-1, 256, 256), lock=False).fillna(0)

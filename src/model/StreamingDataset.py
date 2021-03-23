@@ -4,7 +4,6 @@ import rasterio as rio
 from rasterio.windows import Window
 import torch
 from torch.utils.data.dataset import IterableDataset
-from torchvision.transforms.functional import center_crop
 
 class StreamingDataset(IterableDataset):
 
@@ -27,6 +26,11 @@ class StreamingDataset(IterableDataset):
         self.num_tiles = len(imagery_files)
         self.num_samples = num_chips_per_tile * len(imagery_files)
 
+    def __center_crop(self, window, size):
+        row_off = window.height // 2 - (size // 2)
+        col_off = window.width // 2 - (size // 2)
+        return Window(row_off, col_off, size, size)
+
     def stream_chips(self):
         for i in range(self.num_samples):
             tile_index = np.random.randint(self.num_tiles)
@@ -41,11 +45,10 @@ class StreamingDataset(IterableDataset):
                 self.feature_chip_size
             )
 
-            img_chip = img_ds.read(range(1,8), window=window)
-            label_chip = center_crop(
-                torch.Tensor(label_ds.read(self.label_band, window=window)),
-                self.label_chip_size
-            )
+            img_chip = img_ds.read(range(1, 8), window=window)
+            label_window = self.__center_crop(window, self.label_chip_size)
+            label_chip = label_ds.read(self.label_band, window=label_window)
+
             yield (
                 np.nan_to_num(img_chip, False),
                 np.nan_to_num(label_chip, False)
