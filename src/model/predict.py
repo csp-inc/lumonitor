@@ -36,7 +36,9 @@ model = Unet(N_BANDS)
 
 CHIP_SIZE = 512
 test_chip = torch.Tensor(1, N_BANDS, CHIP_SIZE, CHIP_SIZE)
-OUTPUT_CHIP_SIZE = model.forward(test_chip).shape[2] - 4
+total_padding = CHIP_SIZE - 70
+uncropped_padding = 100
+OUTPUT_CHIP_SIZE = model.forward(test_chip).shape[2] - total_padding
 padding = math.ceil((CHIP_SIZE - OUTPUT_CHIP_SIZE) / 2)
 
 model.load_state_dict(torch.load(model_file))
@@ -57,27 +59,29 @@ def get_output_file(input_file):
 
 
 for image_file in image_files:
-    img_ds = xr.open_rasterio(image_file).fillna(0)
+    img_ds = xr.open_rasterio(image_file, cache=True).fillna(0)
     output_ds = get_one_band_copy(img_ds)
+    uncropped_output_ds = get_one_band_copy(img_ds)
     img_ds = torch.tensor(img_ds.values)
 
     n_rows = img_ds.shape[1]
     n_cols = img_ds.shape[2]
+
     n_chip_rows = math.ceil(n_rows / OUTPUT_CHIP_SIZE)
     n_chip_cols = math.ceil(n_cols / OUTPUT_CHIP_SIZE)
 
     for row in range(n_chip_rows):
         for col in range(n_chip_cols):
-            xmin = 0 + row * OUTPUT_CHIP_SIZE
+            xmin = 0 + col * OUTPUT_CHIP_SIZE
             xmax = xmin + CHIP_SIZE
-            if xmax > n_rows:
-                xmax = n_rows
+            if xmax > n_cols:
+                xmax = n_cols
                 xmin = xmax - CHIP_SIZE
 
-            ymin = 0 + col * OUTPUT_CHIP_SIZE
+            ymin = 0 + row * OUTPUT_CHIP_SIZE
             ymax = ymin + CHIP_SIZE
-            if ymax > n_cols:
-                ymax = n_cols
+            if ymax > n_rows:
+                ymax = n_rows
                 ymin = ymax - CHIP_SIZE
 
             input_data = img_ds[:, xmin:xmax, ymin:ymax].unsqueeze(0)
@@ -85,6 +89,18 @@ for image_file in image_files:
             output_array = output_data.detach().cpu().numpy()
             ncol = np.shape(output_array)[1]
             nrow = np.shape(output_array)[2]
+
+            if row == 0 or row == n_chip_rows - 1 or col == 0 or col == n_chip_cols - 1:
+                uncropped_output_ds[
+                    :,
+                    (xmin + uncropped_padding):(xmax - uncropped_padding),
+                    (ymin + uncropped_padding):(ymax - uncropped_padding)
+                    ] = output_array[
+                            :,
+                            uncropped_padding:(ncol - uncropped_padding),
+                            uncropped_padding:(nrow - uncropped_padding)
+                        ]
+
             cropped_output_array = output_array[
                 :, padding:ncol-padding, padding:nrow-padding
             ]
@@ -92,7 +108,21 @@ for image_file in image_files:
                 :, xmin+padding:xmax-padding, ymin+padding:ymax-padding
             ] = cropped_output_array
 
-    output_file = get_output_file(image_file)
-    output_ds.rio.to_raster(output_file)
-    print(output_file)
+    uncropped_output_ds[
+        :,
+        padding:n_cols-padding,
+        padding:n_rows-padding
+    ] = output_ds[
+        :,
+        padding:n_cols-padding,
+        padding:n_rows-padding
+    ]
 
+    uncropped_output_ds[:, 0:uncropped_padding, :] = -9999
+    uncropped_output_ds[:, :, 0:uncropped_padding] = -9999
+    uncropped_output_ds[:, (n_cols - uncropped_padding):n_cols, :] = -9999
+    uncropped_output_ds[:, :, (n_rows - uncropped_padding):n_rows] = -9999
+
+    output_file = get_output_file(image_file)
+    uncropped_output_ds.rio.to_raster(output_file)
+    print(output_file)

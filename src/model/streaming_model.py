@@ -23,24 +23,24 @@ image_files = [
 random.shuffle(image_files)
 n_training_files = math.ceil(len(image_files) * 0.8)
 
-training_files = [
-    os.path.join(cog_dir, '11SLT.tif'),
-    os.path.join(cog_dir, '11SMT.tif'),
+#training_files = [
+#    os.path.join(cog_dir, '11SLT.tif'),
+#    os.path.join(cog_dir, '11SMT.tif'),
 #    os.path.join(cog_dir, '10SGJ.tif'),
-]
+#]
 
-#training_files = image_files[:n_training_files]
+training_files = image_files[:n_training_files]
 tiles = [os.path.splitext(os.path.basename(f))[0] for f in training_files]
 label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in tiles]
 
-#test_files = image_files[n_training_files:]
-test_files = training_files
+test_files = image_files[n_training_files:]
+#test_files = training_files
 test_tiles = [os.path.splitext(os.path.basename(f))[0] for f in test_files]
 test_label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in test_tiles]
 
 # Can go ~25 w/ zero padding, ~16 w/ reflect
 BATCH_SIZE = 6
-N_CHIPS_PER_TILE = 50
+N_CHIPS_PER_TILE = 100
 EPOCHS = 50
 N_TILES = len(tiles)
 N_BANDS = 7
@@ -49,7 +49,7 @@ N_WORKERS = 6
 
 CHIP_SIZE = 512
 N_TEST_TILES = len(test_files)
-N_TEST_CHIPS_PER_TILE = 5
+N_TEST_CHIPS_PER_TILE = 25
 N_TEST_SAMPLES_PER_EPOCH = N_TEST_CHIPS_PER_TILE * N_TEST_TILES
 
 LABEL_BAND = 6
@@ -57,7 +57,6 @@ net = Unet(N_BANDS)
 
 test_chip = torch.Tensor(1, N_BANDS, CHIP_SIZE, CHIP_SIZE)
 OUTPUT_CHIP_SIZE = net.forward(test_chip).shape[2]
-print(OUTPUT_CHIP_SIZE)
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -107,6 +106,8 @@ net = net.float().to(dev)
 
 criterion = nn.MSELoss()
 optimizer = optim.SGD(net.parameters(), lr=0.01, momentum=0.8)
+lambda1 = lambda epoch: 0.975 ** epoch
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda1)
 
 for epoch in range(EPOCHS):
     np.random.seed()
@@ -127,7 +128,7 @@ for epoch in range(EPOCHS):
     # Clear these off GPU so we can load up test data
     inputs.detach()
     labels.detach()
-    print('Epoch %d loss: %.3f' %
+    print('Epoch %d loss: %.4f' %
           (epoch + 1, running_loss / N_SAMPLES_PER_EPOCH))
 
     with torch.no_grad():
@@ -140,8 +141,10 @@ for epoch in range(EPOCHS):
             loss = criterion(outputs.squeeze(1), labels.float())
             test_running_loss += loss.item() * BATCH_SIZE
 
-    print('Epoch %d test loss: %.3f' %
+    print('Epoch %d test loss: %.4f' %
           (epoch + 1, test_running_loss / N_TEST_SAMPLES_PER_EPOCH))
+    print('LR: %.4f' % optimizer.param_groups[0]["lr"])
+    scheduler.step()
 
 
 torch.save(net.state_dict(), 'data/imp_model_padded_2.pt')
