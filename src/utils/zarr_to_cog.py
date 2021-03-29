@@ -22,5 +22,10 @@ input_mapper = fsspec.get_mapper(
     account_key=args.account_key
     )
 
-xr.open_zarr(input_mapper).isel(year=0).rio.to_raster(args.cog)
-
+xr.open_zarr(input_mapper).isel(year=0).rio.to_raster(
+        args.cog,
+        dtype='float32',
+        compress='LZW',
+        predictor=3,
+        tiled=True
+    )
