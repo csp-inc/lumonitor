@@ -46,9 +46,12 @@ class LuDataset(Dataset):
 
         label_window = self.__center_crop(window, self.label_chip_size)
         label_chip = label_ds.read(self.label_band, window=label_window)
+
         return (
             np.nan_to_num(img_chip, False),
             np.nan_to_num(label_chip, False)
         )
+
+
     def __len__(self):
         return self.num_chips
