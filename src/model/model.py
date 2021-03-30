@@ -10,8 +10,8 @@ import torch.nn as nn
 import torch.optim as optim
 import xarray as xr
 
-from LuDataset import LuDataset as Dataset
-from Unet_padded import Unet
+from datasets.LuDataset import LuDataset as Dataset
+from models.Unet_padded import Unet
 
 cog_dir = 'data/cog/2016/training'
 image_files = [
