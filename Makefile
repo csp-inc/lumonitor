@@ -15,9 +15,11 @@ COG_DIR=$(DATA)cog
 VPATH=src/:$(DATA):$(BLOB_DIR):$(COG_DIR)
 SHELL=/usr/bin/env bash
 
+PREFIX=2016/
+
 # I really am not sure why this works, some interaction between --delimiter and
 # -o tsv makes it list just the paths. Alternatively use jq & json output, I guess.
-BLOBS=$(shell az storage blob list --prefix 'zarr/2016/' --delimiter 'zarr' -c $(CONTAINER) --account-key=$(ACCOUNT_KEY) --account-name=$(ACCOUNT_NAME) -o tsv | sed 's/.zarr\//.zarr/' | tr '\n' ' ')
+BLOBS=$(shell az storage blob list --prefix zarr/$(PREFIX) --delimiter 'zarr' -c $(CONTAINER) --account-key=$(ACCOUNT_KEY) --account-name=$(ACCOUNT_NAME) -o tsv | sed 's/.zarr\//.zarr/' | tr '\n' ' ')
 
 #$(info $(BLOBS))
 
@@ -27,24 +29,20 @@ BLOBS=$(shell az storage blob list --prefix 'zarr/2016/' --delimiter 'zarr' -c $
 #LABEL_COGS=$(patsubst %.blob,%, $(GCS_PLACEHOLDERS))
 
 BLOB_PLACEHOLDERS=$(patsubst %,data/blobs/%.blob, $(BLOBS))
-FEATURE_COG_PLACEHOLDERS=$(patsubst data/blobs/%.zarr.blob,data/blobs/%.tif.blob, $(BLOB_PLACEHOLDERS))
-$(info $(FEATURE_COG_PLACEHOLDERS))
+FEATURE_COG_PLACEHOLDERS=$(patsubst data/blobs/zarr/$(PREFIX)%.zarr.blob,data/blobs/cog/$(PREFIX)%.tif.blob, $(BLOB_PLACEHOLDERS))
 
 .PHONY: all cogs predictions tiles
 all: cogs
 cogs: $(FEATURE_COG_PLACEHOLDERS)
 
-$(BLOB_PLACEHOLDERS): %:
-$(FEATURE_COG_PLACEHOLDERS): %.tif.blob: | %.zarr.blob
-
-#data/cog/%.tif: data/blobs/%.tif.gcs
-
-data/blobs/%.tif.blob: data/blobs/%.zarr.blob
-	echo python3 src/utils/zarr_to_cog.py az://$(CONTAINER)/$*.zarr /vsiaz/hls/cog/2016/training/$(*F).tif --account-name=$(ACCOUNT_NAME) --account-key=$(ACCOUNT_KEY)
-	echo touch $@
+data/blobs/cog/$(PREFIX)%.tif.blob: data/blobs/zarr/$(PREFIX)%.zarr.blob
+	python3 src/utils/zarr_to_cog.py  --account-name=$(ACCOUNT_NAME) --account-key=$(ACCOUNT_KEY) az://$(CONTAINER)/zarr/$(PREFIX)$*.zarr /vsiaz/hls/cog/2016/training/$(*F).tif
+	mkdir -p $(@D)
+	touch $@
 
 #data/%.gcs:
 #	echo touch $@
 
 data/%.zarr.blob: 
-	echo touch $@
+	mkdir -p $(@D)
+	touch $@
