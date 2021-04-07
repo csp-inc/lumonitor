@@ -8,7 +8,6 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
-import xarray as xr
 
 from datasets.LuDataset import LuDataset as Dataset
 from models.Unet_padded import Unet

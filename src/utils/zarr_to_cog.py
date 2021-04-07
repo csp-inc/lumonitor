@@ -4,7 +4,6 @@ import argparse
 import os
 
 import fsspec
-import rasterio as rr
 import rioxarray
 import xarray as xr
 
@@ -22,10 +21,14 @@ input_mapper = fsspec.get_mapper(
     account_key=args.account_key
     )
 
-xr.open_zarr(input_mapper).isel(year=0).rio.to_raster(
+os.environ['AZURE_STORAGE_ACCOUNT'] = args.account_name
+os.environ['AZURE_STORAGE_ACCESS_KEY'] = args.account_key
+os.environ['CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE'] = 'YES'
+
+xr.open_zarr(input_mapper, mask_and_scale=False).isel(year=0).rio.to_raster(
         args.cog,
-        dtype='float32',
+        dtype='int16',
         compress='LZW',
-        predictor=3,
+        predictor=2,
         tiled=True
     )
