@@ -1,6 +1,0 @@
-torch
-xarray
-rasterio
-rioxarray
-torchvision
-dask[complete]
