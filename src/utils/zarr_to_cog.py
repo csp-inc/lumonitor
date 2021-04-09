@@ -20,6 +20,10 @@ os.environ['CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE'] = 'YES'
 
 
 def convert(input_zarr, output_cog):
+    input_zarr = 'az://' + input_zarr
+    output_cog = '/vsiaz/' + output_cog
+
+    print(input_zarr, output_cog)
     input_mapper = fsspec.get_mapper(
         input_zarr,
         account_name=os.environ['AZURE_STORAGE_ACCOUNT'],
