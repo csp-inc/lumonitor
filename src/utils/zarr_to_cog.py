@@ -13,6 +13,7 @@ parser.add_argument('--account-key')
 
 args = parser.parse_args()
 
+# Needed for to_raster
 os.environ['AZURE_STORAGE_ACCOUNT'] = args.account_name
 os.environ['AZURE_STORAGE_ACCESS_KEY'] = args.account_key
 os.environ['CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE'] = 'YES'
