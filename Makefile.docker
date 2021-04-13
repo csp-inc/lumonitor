@@ -4,12 +4,13 @@
 SHELL=/usr/bin/env bash
 
 DOCKER_USER=blindjesse
-DOCKER_IMG_VERSION=0.1
+DOCKER_IMG_VERSION=0.2
 PROJECT_NAME=lumonitor
 
 TAG=$(DOCKER_USER)/$(PROJECT_NAME):$(DOCKER_IMG_VERSION)
 
 .DEFAULT_GOAL := nothing
+$(info $(MAKE))
 
 # Feel free to find a better way for this one
 nothing: Dockerfile.built requirements.txt
