@@ -3,7 +3,8 @@ adlfs
 earthengine-api
 torch
 xarray
-rasterio
+git+https://github.com/blindjesse/rasterio.git@az_error
 rioxarray
 torchvision
 dask[complete]
+
