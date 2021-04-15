@@ -4,25 +4,24 @@ import rasterio as rio
 from rasterio.windows import Window
 from torch.utils.data.dataset import Dataset
 
-class LuDataset(Dataset):
+class MosaicDataset(Dataset):
     def __init__(
             self,
-            imagery_files,
-            label_files,
-            label_band=6,
+            imagery_file,
+            label_file,
+            label_band=1,
             feature_chip_size=256,
             label_chip_size=256,
-            num_chips_per_tile=200
+            num_chips=1000
     ):
-        self.imagery_files = imagery_files
-        self.label_files = label_files
-
         self.label_band = label_band
         self.feature_chip_size = feature_chip_size
         self.label_chip_size = label_chip_size
-        self.num_chips_per_tile = num_chips_per_tile
-
-        self.num_chips = num_chips_per_tile * len(imagery_files)
+        self.num_chips = num_chips
+        self.imagery_file = imagery_file
+        self.label_file = label_file
+        self.img_ds = rio.open(self.imagery_file)
+        self.label_ds = rio.open(self.label_file)
 
     def __center_crop(self, window, size):
         col_off = window.col_off + window.width // 2 - (size // 2)
@@ -30,12 +29,12 @@ class LuDataset(Dataset):
         return Window(col_off, row_off, size, size)
 
     def __getitem__(self, idx):
-        tile_idx = int(idx / self.num_chips_per_tile)
-        img_ds = rio.open(self.imagery_files[tile_idx])
-        label_ds = rio.open(self.label_files[tile_idx])
+        img_ds = self.img_ds
+        label_ds = self.label_ds
 
         x = np.random.randint(0, img_ds.shape[0] - self.feature_chip_size)
         y = np.random.randint(0, img_ds.shape[1] - self.feature_chip_size)
+
 
         window = Window(
             x,
@@ -52,7 +51,6 @@ class LuDataset(Dataset):
             np.nan_to_num(img_chip, False),
             np.nan_to_num(label_chip, False)
         )
-
 
     def __len__(self):
         return self.num_chips
