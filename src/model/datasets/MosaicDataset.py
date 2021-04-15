@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 import rasterio as rio
 from rasterio.windows import Window
@@ -20,8 +21,6 @@ class MosaicDataset(Dataset):
         self.num_chips = num_chips
         self.imagery_file = imagery_file
         self.label_file = label_file
-        self.img_ds = rio.open(self.imagery_file)
-        self.label_ds = rio.open(self.label_file)
 
     def __center_crop(self, window, size):
         col_off = window.col_off + window.width // 2 - (size // 2)
@@ -29,6 +28,8 @@ class MosaicDataset(Dataset):
         return Window(col_off, row_off, size, size)
 
     def __getitem__(self, idx):
+        self.img_ds = rio.open(self.imagery_file)
+        self.label_ds = rio.open(self.label_file)
         img_ds = self.img_ds
         label_ds = self.label_ds
 

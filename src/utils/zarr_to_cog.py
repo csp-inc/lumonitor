@@ -61,6 +61,7 @@ def convert(input_zarr, output_cog):
     output_cog = '/vsiaz/' + output_cog
 
     print(input_zarr, output_cog)
+
     input_mapper = fsspec.get_mapper(
         input_zarr,
         account_name=os.environ['AZURE_STORAGE_ACCOUNT'],
@@ -98,7 +99,7 @@ def get_zarr_paths(container, fs):
 def get_cog_for_zarr(zarr):
     container, _, year, file = zarr.split('/')
     cog_file = os.path.splitext(file)[0] + '.tif'
-    return f'{container}/cog/{year}p/training/{cog_file}'
+    return f'{container}/cog/{year}/training_albers/{cog_file}'
 
 
 def get_cogs_for_zarrs(zarrs):

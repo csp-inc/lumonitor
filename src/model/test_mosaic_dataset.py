@@ -26,8 +26,7 @@ def worker_init_fn(worker_id):
 
 loader = DataLoader(
     ds,
-    num_workers=1,
-    batch_size=1,
+    num_workers=5,
     worker_init_fn=worker_init_fn,
 )
 
