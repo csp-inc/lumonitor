@@ -32,14 +32,17 @@ class MosaicDataset(Dataset):
         self.label_ds = rio.open(self.label_file)
         img_ds = self.img_ds
         label_ds = self.label_ds
+        nrow = img_ds.shape[0]
+        ncol = img_ds.shape[1]
 
-        x = np.random.randint(0, img_ds.shape[0] - self.feature_chip_size)
-        y = np.random.randint(0, img_ds.shape[1] - self.feature_chip_size)
-
+        col_off = np.random.randint(0, ncol - self.feature_chip_size)
+        row_off = np.random.randint(0, nrow - self.feature_chip_size)
 
         window = Window(
-            x,
-            y,
+            # Everywhere else it's row, column. This makes some sense
+            # b/c this is ultimately x,y but :exploding_head:
+            col_off,
+            row_off,
             self.feature_chip_size,
             self.feature_chip_size
         )
@@ -50,7 +53,7 @@ class MosaicDataset(Dataset):
 
         return (
             np.nan_to_num(img_chip, False),
-            np.nan_to_num(label_chip, False)
+            np.nan_to_num(label_chip, False),
         )
 
     def __len__(self):

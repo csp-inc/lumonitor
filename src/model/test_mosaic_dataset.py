@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 
 from datasets.MosaicDataset import MosaicDataset as Dataset
 
-training_file = 'data/cog_mosaic.vrt'
+training_file = 'data/conus_hls_median_2016.vrt'
 label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
 
 LABEL_BAND = 1
@@ -26,11 +26,11 @@ def worker_init_fn(worker_id):
 
 loader = DataLoader(
     ds,
-    num_workers=5,
+    num_workers=1,
     worker_init_fn=worker_init_fn,
 )
 
 for epoch in range(1, 3):
     print('epock')
     for i, data in enumerate(loader):
-        print(i)
+        print(data[0].size(), data[1].size())

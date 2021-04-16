@@ -3,6 +3,7 @@ import os
 import random
 import re
 
+from azureml.core import Run
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -12,7 +13,7 @@ import torch.optim as optim
 from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
 
-training_file = 'data/conus_hls_median_2016.vrt'
+training_file = 'model/conus_hls_median_2016.vrt'
 label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
 
 BATCH_SIZE = 1
