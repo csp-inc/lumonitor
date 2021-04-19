@@ -31,6 +31,6 @@ loader = DataLoader(
 )
 
 for epoch in range(1, 3):
-    print('epock')
+    print('epoch')
     for i, data in enumerate(loader):
         print(data[0].size(), data[1].size())

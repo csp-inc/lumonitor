@@ -19,7 +19,7 @@ label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
 BATCH_SIZE = 1
 CHIP_SIZE = 512
 EPOCHS = 50
-N_SAMPLES_PER_EPOCH = 1000
+N_SAMPLES_PER_EPOCH = 250
 N_TEST_SAMPLES_PER_EPOCH = 100
 
 N_WORKERS = 6
@@ -72,10 +72,9 @@ test_loader = DataLoader(
     shuffle=False
 )
 
-if torch.cuda.is_available():
-    dev = "cuda:0"
-else:
-    dev = "cpu"
+
+dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print('Using device:', dev)
 
 net = net.float().to(dev)
 
