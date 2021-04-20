@@ -11,7 +11,7 @@ mkdir r-build-dir
 cp $DOCKERFILE r-build-dir/Dockerfile
 cp $REQUIREMENTS_FILE r-build-dir
 cd r-build-dir
-docker build . -t $TAG
+docker build . -t $TAG --build-arg requirements_file="$REQUIREMENTS_FILE"
 cd ..
 rm -rf r-build-dir
 

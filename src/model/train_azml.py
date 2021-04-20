@@ -4,6 +4,7 @@ import random
 import re
 
 from azureml.core import Run
+import geopandas as gpd
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -13,13 +14,14 @@ import torch.optim as optim
 from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
 
-training_file = 'model/conus_hls_median_2016.vrt'
+training_file = 'data/azml/conus_hls_median_2016.vrt'
 label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
+aoi_file = 'data/azml/conus.geojson'
 
 BATCH_SIZE = 1
 CHIP_SIZE = 512
 EPOCHS = 50
-N_SAMPLES_PER_EPOCH = 250
+N_SAMPLES_PER_EPOCH = 1000
 N_TEST_SAMPLES_PER_EPOCH = 100
 
 N_WORKERS = 6
@@ -35,6 +37,7 @@ OUTPUT_CHIP_SIZE = net.forward(test_chip).shape[2]
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
+aoi = gpd.read_file(aoi_file)
 
 szd = Dataset(
     training_file,
@@ -42,7 +45,8 @@ szd = Dataset(
     label_band=LABEL_BAND,
     feature_chip_size=CHIP_SIZE,
     label_chip_size=OUTPUT_CHIP_SIZE,
-    num_chips=N_SAMPLES_PER_EPOCH
+    num_chips=N_SAMPLES_PER_EPOCH,
+    aoi=aoi
 )
 
 loader = DataLoader(
@@ -51,7 +55,7 @@ loader = DataLoader(
     batch_size=BATCH_SIZE,
     pin_memory=True,
     worker_init_fn=worker_init_fn,
-    shuffle=True
+    shuffle=True,
 )
 
 testsd = Dataset(
@@ -60,7 +64,8 @@ testsd = Dataset(
     label_band=LABEL_BAND,
     feature_chip_size=CHIP_SIZE,
     label_chip_size=OUTPUT_CHIP_SIZE,
-    num_chips=N_TEST_SAMPLES_PER_EPOCH
+    num_chips=N_TEST_SAMPLES_PER_EPOCH,
+    aoi=aoi
 )
 
 test_loader = DataLoader(

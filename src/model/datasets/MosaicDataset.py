@@ -36,7 +36,7 @@ class MosaicDataset(Dataset):
                 buf = math.ceil(-1 *
                                 (self.feature_chip_size / 2) *
                                 r.res[0])
-            return aoi.transform(crs).buffer(buf)
+            return aoi.to_crs(crs).buffer(buf)
         else:
             return None
 

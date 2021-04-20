@@ -1,0 +1,11 @@
+FROM mcr.microsoft.com/azureml/openmpi3.1.2-cuda10.1-cudnn7-ubuntu18.04:20201112.v1
+
+ARG requirements_file
+
+COPY ./$requirements_file ./requirements.txt
+
+RUN apt-get -qqy update && python3 -m pip install -r requirements.txt
+
+RUN pip install horovod==0.21.3
+
+CMD /bin/bash

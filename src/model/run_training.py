@@ -17,16 +17,11 @@ config = ScriptRunConfig(
 
 env = Environment("lumonitor")
 env.docker.enabled = True
-env.docker.base_image = "cspincregistry.azurecr.io/fd-openmpi3.1.2-cuda10.1-cudnn7-ubuntu18.04:latest"
-# check this
-# env.python.user_managed_dependencies = True
+env.docker.base_image = "cspincregistry.azurecr.io/lumonitor-azml:latest"
+env.python.user_managed_dependencies = True
 env.docker.base_image_registry.address = "cspincregistry.azurecr.io"
 env.docker.base_image_registry.username = os.environ['AZURE_REGISTRY_USERNAME']
 env.docker.base_image_registry.password = os.environ['AZURE_REGISTRY_PASSWORD']
-
-conda_dep = CondaDependencies()
-conda_dep.add_conda_package("geopandas")
-env.python.conda_dependencies = conda_dep
 
 env.environment_variables = dict(
     AZURE_STORAGE_ACCOUNT=os.environ['AZURE_STORAGE_ACCOUNT'],
@@ -36,6 +31,4 @@ env.environment_variables = dict(
 config.run_config.environment = env
 
 run = experiment.submit(config)
-
-url = run.get_portal_url()
-print(url)
+run.upload_folder('data/azml', 'data/azml')
