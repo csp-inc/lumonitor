@@ -31,4 +31,3 @@ env.environment_variables = dict(
 config.run_config.environment = env
 
 run = experiment.submit(config)
-run.upload_folder('data/azml', 'data/azml')

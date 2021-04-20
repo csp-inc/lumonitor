@@ -14,15 +14,15 @@ import torch.optim as optim
 from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
 
-training_file = 'data/azml/conus_hls_median_2016.vrt'
+training_file = 'model/data/azml/conus_hls_median_2016.vrt'
+aoi_file = 'model/data/azml/conus.geojson'
 label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
-aoi_file = 'data/azml/conus.geojson'
 
-BATCH_SIZE = 1
+BATCH_SIZE = 8
 CHIP_SIZE = 512
 EPOCHS = 50
-N_SAMPLES_PER_EPOCH = 1000
-N_TEST_SAMPLES_PER_EPOCH = 100
+N_SAMPLES_PER_EPOCH = 10000
+N_TEST_SAMPLES_PER_EPOCH = 2500
 
 N_WORKERS = 6
 
@@ -33,6 +33,8 @@ LABEL_BAND = 1
 
 test_chip = torch.Tensor(1, N_BANDS, CHIP_SIZE, CHIP_SIZE)
 OUTPUT_CHIP_SIZE = net.forward(test_chip).shape[2]
+
+run = Run.get_context()
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -107,8 +109,8 @@ for epoch in range(EPOCHS):
     # Clear these off GPU so we can load up test data
     inputs.detach()
     labels.detach()
-    print('Epoch %d loss: %.4f' %
-          (epoch + 1, running_loss / N_SAMPLES_PER_EPOCH))
+    train_loss = running_loss / N_SAMPLES_PER_EPOCH
+    print('Epoch %d loss: %.4f' % (epoch + 1, train_loss))
 
     with torch.no_grad():
         for i, test_data in enumerate(test_loader):
@@ -120,10 +122,14 @@ for epoch in range(EPOCHS):
             loss = criterion(outputs.squeeze(1), labels.float())
             test_running_loss += loss.item() * BATCH_SIZE
 
-    print('Epoch %d test loss: %.4f' %
-          (epoch + 1, test_running_loss / N_TEST_SAMPLES_PER_EPOCH))
-    print('LR: %.4f' % optimizer.param_groups[0]["lr"])
+    test_loss = test_running_loss / N_TEST_SAMPLES_PER_EPOCH
+    print('Epoch %d test loss: %.4f' % (epoch + 1, test_loss))
+    run.log_row("Loss", x=epoch+1, Training=train_loss, Test=test_loss)
+
+    lr = optimizer.param_groups[0]["lr"]
+    print('LR: %.4f' % lr)
+    run.log("lr", lr)
     scheduler.step()
 
 
-torch.save(net.state_dict(), 'data/imp_model_padded_2.pt')
+torch.save(net.state_dict(), './outputs/imp_model_padded_2.pt')

@@ -12,11 +12,12 @@ from torch.utils.data.dataset import Dataset
 class MosaicDataset(Dataset):
     def __init__(
             self,
-            imagery_file,
-            label_file,
+            feature_file,
+            feature_chip_size=512,
+            label_file=None,
             label_band=1,
-            feature_chip_size=256,
             label_chip_size=256,
+            mode='train',
             num_chips=1000,
             aoi=None
     ):

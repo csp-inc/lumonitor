@@ -79,7 +79,7 @@ def write_output_file(
 
 def make_predictions(model_file, input_files, output_directory):
     if torch.cuda.is_available():
-        dev = "cuda:0"
+        dev = "cuda"
     else:
         dev = "cpu"
 
