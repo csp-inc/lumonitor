@@ -1,0 +1,3 @@
+epochs: 10
+training_samples: 25
+test_samples: 10

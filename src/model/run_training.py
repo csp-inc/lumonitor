@@ -1,33 +1,40 @@
+import argparse
 import os
 
-from azureml.core import Environment
-from azureml.core import Experiment
-from azureml.core import ScriptRunConfig
-from azureml.core import Workspace
-from azureml.core.conda_dependencies import CondaDependencies
+from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
+import yaml
 
-ws = Workspace.from_config()
-experiment = Experiment(workspace=ws, name="lumonitor-conus-impervious-2016")
+if __name__ == "__main__":
 
-config = ScriptRunConfig(
-    source_directory='./src',
-    script='model/train_azml.py',
-    compute_target='gpu-cluster',
-)
+    ws = Workspace.from_config()
+    experiment = Experiment(
+        workspace=ws,
+        name="lumonitor-conus-impervious-2016"
+    )
 
-env = Environment("lumonitor")
-env.docker.enabled = True
-env.docker.base_image = "cspincregistry.azurecr.io/lumonitor-azml:latest"
-env.python.user_managed_dependencies = True
-env.docker.base_image_registry.address = "cspincregistry.azurecr.io"
-env.docker.base_image_registry.username = os.environ['AZURE_REGISTRY_USERNAME']
-env.docker.base_image_registry.password = os.environ['AZURE_REGISTRY_PASSWORD']
+    config = ScriptRunConfig(
+        source_directory='./src',
+        script='model/train_azml.py',
+        compute_target='gpu-cluster',
+        arguments=[
+            '--params-path',
+            'src/model/configs/conus-impervious-2016.yml'
+        ]
+    )
 
-env.environment_variables = dict(
-    AZURE_STORAGE_ACCOUNT=os.environ['AZURE_STORAGE_ACCOUNT'],
-    AZURE_STORAGE_ACCESS_KEY=os.environ['AZURE_STORAGE_ACCESS_KEY']
-)
+    env = Environment("lumonitor")
+    env.docker.enabled = True
+    env.docker.base_image = "cspincregistry.azurecr.io/lumonitor-azml:latest"
+    env.python.user_managed_dependencies = True
+    env.docker.base_image_registry.address = "cspincregistry.azurecr.io"
+    env.docker.base_image_registry.username = os.environ['AZURE_REGISTRY_USERNAME']
+    env.docker.base_image_registry.password = os.environ['AZURE_REGISTRY_PASSWORD']
 
-config.run_config.environment = env
+    env.environment_variables = dict(
+        AZURE_STORAGE_ACCOUNT=os.environ['AZURE_STORAGE_ACCOUNT'],
+        AZURE_STORAGE_ACCESS_KEY=os.environ['AZURE_STORAGE_ACCESS_KEY']
+    )
 
-run = experiment.submit(config)
+    config.run_config.environment = env
+
+    run = experiment.submit(config)

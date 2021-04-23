@@ -1,0 +1,44 @@
+# This template specifies all the param options for training FD nets
+# credit: taken from @ohiat / forest disturbance
+
+#### REQUIRED PARAMS ####
+
+# how many epochs to train for
+epochs: 40
+
+# training samples per epoch
+training_samples: 1000
+
+# test samples per epoch
+test_samples: 100
+
+# The random seed to use for all random functions in torch, np, random packages
+seed: 1337
+
+#### OPTIONAL PARAMS ####
+
+# how many nodes (machines) to train on in parallel
+node_count: 1
+
+# if you want to reduce learning_rate over time include the two configs below
+# ref: torch.optim.lr_scheduler.StepLR
+learning_schedule_gamma: 0.1
+# Ben had this but I took it out till I look at his code
+# learning_schedule_epochs: 20
+
+# momentum
+momentum: 0.8
+
+
+# feature chip size, default is 512
+chip_size: 512
+
+# starting learning rate
+learning_rate: 0.01
+
+# limit samples to this file, must be in data/azml (for now!)
+aoi_file: conus.geojson
+
+# batch size
+batch_size: 8
+
