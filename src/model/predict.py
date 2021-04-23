@@ -116,13 +116,13 @@ def make_predictions(model_file, input_files, output_directory):
 
         for row in range(n_chip_rows):
             for col in range(n_chip_cols):
-                xmin = 0 + col * OUTPUT_CHIP_SIZE
+                xmin = col * OUTPUT_CHIP_SIZE
                 xmax = xmin + CHIP_SIZE
                 if xmax > n_cols:
                     xmax = n_cols
                     xmin = xmax - CHIP_SIZE
 
-                ymin = 0 + row * OUTPUT_CHIP_SIZE
+                ymin = row * OUTPUT_CHIP_SIZE
                 ymax = ymin + CHIP_SIZE
                 if ymax > n_rows:
                     ymax = n_rows

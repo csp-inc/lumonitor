@@ -14,15 +14,22 @@ import torch.optim as optim
 from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
 
-training_file = 'model/data/azml/conus_hls_median_2016.vrt'
-aoi_file = 'model/data/azml/conus.geojson'
+run = Run.get_context()
+offline = run._run_id.startswith("OfflineRun")
+path = 'data/azml' if offline else 'model/data/azml'
+
+training_file = os.path.join(path, 'conus_hls_median_2016.vrt')
+aoi_file = os.path.join(path, 'conus.geojson')
+
 label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
 
 BATCH_SIZE = 8
 CHIP_SIZE = 512
-EPOCHS = 50
-N_SAMPLES_PER_EPOCH = 10000
-N_TEST_SAMPLES_PER_EPOCH = 2500
+EPOCHS = 5 # 50
+#N_SAMPLES_PER_EPOCH = 10000
+#N_TEST_SAMPLES_PER_EPOCH = 2500
+N_SAMPLES_PER_EPOCH = 10
+N_TEST_SAMPLES_PER_EPOCH = 2
 
 N_WORKERS = 6
 
@@ -34,50 +41,38 @@ LABEL_BAND = 1
 test_chip = torch.Tensor(1, N_BANDS, CHIP_SIZE, CHIP_SIZE)
 OUTPUT_CHIP_SIZE = net.forward(test_chip).shape[2]
 
-run = Run.get_context()
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
 aoi = gpd.read_file(aoi_file)
 
-szd = Dataset(
-    training_file,
-    label_file,
-    label_band=LABEL_BAND,
-    feature_chip_size=CHIP_SIZE,
-    label_chip_size=OUTPUT_CHIP_SIZE,
-    num_chips=N_SAMPLES_PER_EPOCH,
-    aoi=aoi
-)
+dataset_kwargs = {
+    'feature_file': training_file,
+    'feature_chip_size': CHIP_SIZE,
+    'output_chip_size': OUTPUT_CHIP_SIZE,
+    'aoi': aoi,
+    'label_file': label_file
+}
 
-loader = DataLoader(
-    szd,
-    num_workers=N_WORKERS,
-    batch_size=BATCH_SIZE,
-    pin_memory=True,
-    worker_init_fn=worker_init_fn,
-    shuffle=True,
+dataloader_kwargs = {
+    'num_workers': N_WORKERS,
+    'batch_size': BATCH_SIZE,
+    'pin_memory': True,
+    'worker_init_fn': worker_init_fn
+}
+
+szd = Dataset(
+    num_training_chips=N_SAMPLES_PER_EPOCH,
+    **dataset_kwargs
 )
+loader = DataLoader(szd, shuffle=True, **dataloader_kwargs)
 
 testsd = Dataset(
-    training_file,
-    label_file,
-    label_band=LABEL_BAND,
-    feature_chip_size=CHIP_SIZE,
-    label_chip_size=OUTPUT_CHIP_SIZE,
-    num_chips=N_TEST_SAMPLES_PER_EPOCH,
-    aoi=aoi
+    num_training_chips=N_TEST_SAMPLES_PER_EPOCH,
+    **dataset_kwargs
 )
-
-test_loader = DataLoader(
-    testsd,
-    num_workers=N_WORKERS,
-    batch_size=BATCH_SIZE,
-    pin_memory=True,
-    worker_init_fn=worker_init_fn,
-    shuffle=False
-)
+test_loader = DataLoader(testsd, shuffle=False, **dataloader_kwargs)
 
 
 dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -106,7 +101,7 @@ for epoch in range(EPOCHS):
         loss.backward()
         optimizer.step()
         running_loss += loss.item() * BATCH_SIZE
-    # Clear these off GPU so we can load up test data
+
     inputs.detach()
     labels.detach()
     train_loss = running_loss / N_SAMPLES_PER_EPOCH
