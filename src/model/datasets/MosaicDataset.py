@@ -9,6 +9,7 @@ import rasterio as rio
 from rasterio.windows import bounds, Window
 from rasterio.transform import rowcol
 from shapely.geometry import box, Point
+from tenacity import retry, stop_after_attempt, wait_fixed
 from torch.utils.data.dataset import Dataset
 
 def range_with_end(start, end, step):
@@ -76,7 +77,7 @@ class MosaicDataset(Dataset):
         return None
 
     def _points_in_aoi(self, points: GeoSeries) -> GeoSeries:
-        if self.aoi is not None:
+        if self.aoi is None:
             good_points = points.within(self.aoi.unary_union)
             points = points[good_points]
         return points
@@ -118,7 +119,7 @@ class MosaicDataset(Dataset):
         transform = self.profile['transform']
         return rowcol(transform, upper_left_points.x, upper_left_points.y)
 
-    def _get_window(self, idx):
+    def _get_window(self, idx: int) -> Window:
         return Window(
             self.col_offs[idx],
             self.row_offs[idx],
@@ -126,26 +127,26 @@ class MosaicDataset(Dataset):
             self.feature_chip_size
         )
 
-    def _center_crop_window(self, window, size):
+    def _center_crop_window(self, window: Window, size: int) -> Window:
         col_off = window.col_off + window.width // 2 - (size // 2)
         row_off = window.row_off + window.height // 2 - (size // 2)
         return Window(col_off, row_off, size, size)
 
-    def get_cropped_window(self, idx, size):
+    def get_cropped_window(self, idx: int, size: int) -> Window:
         return self._center_crop_window(self._get_window(idx), size)
 
-    def _get_gpdf_from_bounds(self, bounds):
-        return gpd.GeoDataFrame(
+    def _get_gpdf_from_bounds(self, bounds: tuple) -> GeoDataFrame:
+        return GeoDataFrame(
             {'geometry': [box(*bounds)]},
             crs=self.profile['crs']
         )
 
-    def _get_gpdf_from_window(self, window):
+    def _get_gpdf_from_window(self, window: Window) -> GeoDataFrame:
         return self._get_gpdf_from_bounds(
             bounds(window, self.profile['transform']),
         )
 
-    def _window_overlaps_aoi(self, window):
+    def _window_overlaps_aoi(self, window: Window) -> bool:
         if self.aoi is not None:
             window_gpdf = self._get_gpdf_from_window(window)
             overlap = gpd.overlay(window_gpdf, self.aoi)
@@ -153,26 +154,29 @@ class MosaicDataset(Dataset):
 
         return True
 
-    def _get_img_chip(self, window):
+    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
+    def _read_chip(self, ds, kwargs):
+        return ds.read(**kwargs)
+
+    def _get_img_chip(self, window: Window):
         with rio.open(self.feature_file) as img_ds:
-            img_chip = img_ds.read(
-                range(1, 8),
-                window=window,
-                masked=True
+            img_chip = self._read_chip(
+                img_ds,
+                {'indexes': range(1, 8), 'window': window, 'masked': True}
             ).filled(0) * img_ds.scales[0]
             # A couple leaps here ^^^^^
         return img_chip
 
-    def _get_label_chip(self, window):
+    def _get_label_chip(self, window: Window):
         label_window = self._center_crop_window(
             window,
             self.output_chip_size
         )
 
         with rio.open(self.label_file) as label_ds:
-            label_chip_raw = label_ds.read(
-                self.label_band,
-                window=label_window,
+            label_chip_raw = self._read_chip(
+                label_ds,
+                {'indexes': self.label_band, 'window': label_window}
             )
 
         imp_nodata_val = 127
@@ -183,7 +187,7 @@ class MosaicDataset(Dataset):
         # Replace nodatas with 0,
         # then divide by 100 for real values
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         window = self._get_window(idx)
 
         img_chip = self._get_img_chip(window)
@@ -194,5 +198,5 @@ class MosaicDataset(Dataset):
 
         return img_chip
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.num_chips

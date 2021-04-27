@@ -1,5 +1,4 @@
 import numpy as np
-
 import rasterio as rio
 from rasterio.warp import calculate_default_transform
 
