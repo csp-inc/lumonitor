@@ -138,7 +138,7 @@ def train(
         # Just for testing, we dont' need to save GB of models
         # ^^ Well then how do we go back?
         # Only save the last one?
-        torch.save(net.state_dict(), './outputs/{run.id}_{i}.pt')
+        torch.save(net.state_dict(), f'./outputs/model.pt')
 
 
 if __name__ == '__main__':

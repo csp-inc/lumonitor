@@ -18,7 +18,7 @@ if __name__ == "__main__":
         compute_target='gpu-cluster',
         arguments=[
             '--params-path',
-            'src/model/configs/conus-impervious-2016.yml'
+            'model/configs/conus-impervious-2016.yml'
         ]
     )
 
