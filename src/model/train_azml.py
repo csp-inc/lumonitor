@@ -8,6 +8,8 @@ import yaml
 from azureml.core import Run
 import geopandas as gpd
 import numpy as np
+from matplotlib.colors import LinearSegmentedColormap
+from PIL import Image
 import rasterio as rio
 import torch
 from torch.utils.data import DataLoader
@@ -48,6 +50,10 @@ def train(
     with rio.open(training_file) as src:
         num_bands = src.count
 
+    with rio.open(label_file) as dst:
+        dst_kwargs = dst.meta.copy()
+    dst_kwargs.update({'count': 1, 'dtype': 'float32'})
+
     net = Unet(num_bands)
 
     test_chip = torch.Tensor(1, num_bands, chip_size, chip_size)
@@ -68,17 +74,45 @@ def train(
         'worker_init_fn': worker_init_fn
     }
 
-    szd = Dataset(
-        num_training_chips=training_samples,
-        **dataset_kwargs
-    )
-    loader = DataLoader(szd, shuffle=True, **dataloader_kwargs)
-
     testsd = Dataset(
         num_training_chips=test_samples,
         **dataset_kwargs
     )
     test_loader = DataLoader(testsd, shuffle=False, **dataloader_kwargs)
+
+    def write_swatches(
+            net: Unet,
+            swatches: gpd.GeoDataFrame,
+            epoch: int
+    ) -> None:
+        ramp = [
+            (0, '#010101'),
+            (1/3., '#ff0101'),
+            (2/3., '#ffbb01'),
+            (1, '#ffff01')
+        ]
+        cm = LinearSegmentedColormap.from_list("urban", ramp)
+        for swatch in swatches:
+            swatch_kwargs = dataset_kwargs.copy()
+            swatch_kwargs.update({'aoi': swatch})
+            ds = Dataset(**swatch_kwargs)
+            dl = DataLoader(ds, **dataloader_kwargs)
+            output_file = f'outputs/swatch_{swatch.name}_{epoch}.png'
+            for i, data in enumerate(dl):
+                output_tensor = net(data.float().to(dev))
+                output_np = output_tensor.detach().cpu().numpy()
+                prediction = output_np[: 221:291, 221:291]
+                window = ds.get_cropped_window(i, output_chip_size)
+                # Figure out how to create this of the correct size
+                # I think what we need to do is get the resolution
+                # from the input raster, and the xmax and xmin from the
+                # ds, then ceiling(range / res)
+                output_np[
+                    window.col_off:window.col_off + window.width,
+                    window.row_off:window.row_off + window.height
+                ] = prediction
+                rgb = Image.fromarray(np.uint8(cm(output_np)*255))
+                rgb.save(output_file)
 
     dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print('Using device:', dev)
@@ -96,6 +130,14 @@ def train(
 
     for epoch in range(epochs):
         np.random.seed()
+
+        # Reset this at each epoch so samples change
+        szd = Dataset(
+            num_training_chips=training_samples,
+            **dataset_kwargs
+        )
+        loader = DataLoader(szd, shuffle=True, **dataloader_kwargs)
+
         running_loss = 0.0
         test_running_loss = 0.0
         for i, data in enumerate(loader):
@@ -126,6 +168,16 @@ def train(
                 loss = criterion(outputs.squeeze(1), labels.float())
                 test_running_loss += loss.item() * batch_size
 
+            write_swatches(net, swatches, swatch_dl, epoch)
+
+#            with rio.open(output_file
+#            for i, test_area_data in enumerate(test_area_loader):
+#                output_torch = net(data.float().to(dev))
+#                output_np = output_torch.detach().cpu().numpy()
+#                prediction = output_np[:, 221:291, 221:291]
+#                window = test_area_ds.get_cropped_window(i, output_chip_size)
+
+
         test_loss = test_running_loss / test_samples
         print('Epoch %d test loss: %.4f' % (epoch + 1, test_loss))
         run.log_row("Loss", x=epoch+1, Training=train_loss, Test=test_loss)
@@ -150,7 +202,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     with open(args.params_path) as f:
-        params = yaml.load(f)
+        params = yaml.safe_load(f)
 
     run = Run.get_context()
     [run.tag(k, str(v)) for k, v in params.items()]

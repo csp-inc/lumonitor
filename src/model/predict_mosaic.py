@@ -45,11 +45,10 @@ kwargs.update({'count': 1, 'dtype': 'float32'})
 
 with rio.open(output_file, 'w', **kwargs) as dst:
     for i, data in enumerate(loader):
-        if data != []:
-            print(i)
-            output_torch = model(data.float().to(dev))
-            output_np = output_torch.detach().cpu().numpy()
-            prediction = output_np[0:1, 221:291, 221:291]
+        print(i)
+        output_torch = model(data.float().to(dev))
+        output_np = output_torch.detach().cpu().numpy()
+        prediction = output_np[0:1, 221:291, 221:291]
 
-            window = pds.get_cropped_window(i, OUTPUT_CHIP_SIZE)
-            dst.write(prediction, window=window)
+        window = pds.get_cropped_window(i, OUTPUT_CHIP_SIZE)
+        dst.write(prediction, window=window)

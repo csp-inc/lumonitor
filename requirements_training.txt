@@ -27,3 +27,5 @@ geopandas
 matplotlib
 pygeos
 tenacity
+Pillow
+matplotlib

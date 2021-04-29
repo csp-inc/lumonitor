@@ -12,12 +12,15 @@ from shapely.geometry import box, Point
 from tenacity import retry, stop_after_attempt, wait_fixed
 from torch.utils.data.dataset import Dataset
 
-def range_with_end(start, end, step):
+
+# correct return type ?
+def range_with_end(start: int, end: int, step: int) -> int:
     i = start
     while i < end:
         yield i
         i += step
     yield end
+
 
 class MosaicDataset(Dataset):
     def __init__(
@@ -30,7 +33,7 @@ class MosaicDataset(Dataset):
             label_band: int = 1,
             mode: str = 'train',
             num_training_chips: int = 0,
-    ) -> None:
+    ):
         self.feature_file = feature_file
         self.feature_chip_size = feature_chip_size
         self.output_chip_size = output_chip_size
@@ -42,6 +45,7 @@ class MosaicDataset(Dataset):
         if self.mode == 'train':
             self.label_file = label_file
             self.label_band = label_band
+            # These need to happen in these orders :eyeroll:
             self.num_chips = num_training_chips
             self.row_offs, self.col_offs = self._get_indices()
         else:
@@ -61,7 +65,7 @@ class MosaicDataset(Dataset):
         with rio.open(self.feature_file) as r:
             return(r.profile, r.bounds, r.res)
 
-    def _transform_and_buffer(self, aoi):
+    def _transform_and_buffer(self, aoi: GeoDataFrame) -> None:
         if aoi is not None:
             if self.mode == 'train':
                 buf = math.ceil(-1 *
@@ -77,12 +81,12 @@ class MosaicDataset(Dataset):
         return None
 
     def _points_in_aoi(self, points: GeoSeries) -> GeoSeries:
-        if self.aoi is None:
+        if self.aoi is not None:
             good_points = points.within(self.aoi.unary_union)
             points = points[good_points]
         return points
 
-    def _get_grid_points(self):
+    def _get_grid_points(self) -> GeoSeries:
         x_min, y_min, x_max, y_max = self.bounds
         points = GeoSeries([
             Point(x, y)
@@ -99,23 +103,27 @@ class MosaicDataset(Dataset):
         ])
         return self._points_in_aoi(points)
 
-    def _get_random_points(self):
+    def _get_random_points(self) -> GeoSeries:
         x_min, y_min, x_max, y_max = self.bounds
 
-        upper_left_points = []
+        upper_left_points = GeoSeries([])
         while len(upper_left_points) < self.num_chips:
-            x = np.random.uniform(x_min, x_max, self.num_chips)
-            y = np.random.uniform(y_min, y_max, self.num_chips)
-            points = gpd.points_from_xy((x, y))
-            upper_left_points.append(self.points_in_aoi(points))
+            x = np.random.uniform(x_min, x_max, self.num_chips * 2)
+            y = np.random.uniform(y_min, y_max, self.num_chips * 2)
+            points = GeoSeries(gpd.points_from_xy(x, y))
+            new_points = self._points_in_aoi(points)
+            upper_left_points = upper_left_points.append(new_points)
+            # ^^^^^ eye roll
+
         return upper_left_points[0:self.num_chips]
 
     def _get_indices(self):
         if self.mode == "train":
-            upper_left_points = self._get_grid_points()
-        else:
             upper_left_points = self._get_random_points()
+        else:
+            upper_left_points = self._get_grid_points()
 
+        print('done')
         transform = self.profile['transform']
         return rowcol(transform, upper_left_points.x, upper_left_points.y)
 
