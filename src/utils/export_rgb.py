@@ -2,7 +2,6 @@ import argparse
 
 from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
-from PIL import Image
 import rasterio as rio
 
 
