@@ -56,23 +56,24 @@ class MosaicDataset(Dataset):
         if self.aoi is None:
             return self.raster_bounds
 
-        return gpd.overlay(
+        b = gpd.overlay(
             self._get_gpdf_from_bounds(self.raster_bounds),
             self._get_gpdf_from_bounds(self.aoi.total_bounds)
         ).total_bounds
+        return b
 
     def _get_raster_info(self):
         with rio.open(self.feature_file) as r:
-            return(r.profile, r.bounds, r.res)
+            return(r.profile, r.bounds, r.res[0])
 
     def _transform_and_buffer(self, aoi: GeoDataFrame) -> None:
         if aoi is not None:
             if self.mode == 'train':
                 buf = math.ceil(-1 *
                                 (self.feature_chip_size / 2) *
-                                self.res[0])
+                                self.res)
             else:
-                buf = self.feature_chip_size
+                buf = self.feature_chip_size * self.res
 
             crs = self.profile['crs']
             buffed_gds = aoi.to_crs(crs).buffer(buf)
@@ -123,7 +124,6 @@ class MosaicDataset(Dataset):
         else:
             upper_left_points = self._get_grid_points()
 
-        print('done')
         transform = self.profile['transform']
         return rowcol(transform, upper_left_points.x, upper_left_points.y)
 

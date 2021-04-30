@@ -48,7 +48,13 @@ class Trainer():
         self.label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
         self.aoi = self._load_aoi(path, self.aoi_file)
         self.num_training_bands, self.res = self._get_training_raster_specs()
+        self.dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print('Using device:', self.dev)
+        self.net = Unet(self.num_training_bands).float().to(self.dev)
         self.output_chip_size = self._get_output_chip_size()
+
+        swatch_file = os.path.join(path, 'swatches.gpkg')
+        self.swatches = gpd.read_file(swatch_file)
 
         self.dataset_kwargs = {
             'feature_file': self.training_file,
@@ -72,9 +78,6 @@ class Trainer():
             shuffle=False,
             **self.dataloader_kwargs
         )
-        self.dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print('Using device:', self.dev)
-        self.net = Unet(self.num_training_bands).float.to(self.dev)
         self.criterion = nn.MSELoss()
         self.optimizer = optim.SGD(
             self.net.parameters(),
@@ -106,7 +109,7 @@ class Trainer():
             self.num_training_bands,
             self.chip_size,
             self.chip_size
-        )
+        ).to(self.dev)
         return self.net.forward(test_chip).shape[2]
 
     def _get_ds(self) -> Dataset:
@@ -137,12 +140,14 @@ class Trainer():
 
             with torch.no_grad():
                 test_running_loss = self._eval_step()
-#                self._write_swatches(epoch)
+                self._write_swatches(epoch)
 
             test_loss = test_running_loss / self.test_samples
             print('Epoch %d test loss: %.4f' % (epoch + 1, test_loss))
 
-            run.log_row("Loss", x=epoch+1, Training=train_loss, Test=test_loss)
+            run.log("epoch", epoch+1)
+            run.log("Training Loss", train_loss)
+            run.log("Test Loss", test_loss)
 
             lr = self.optimizer.param_groups[0]["lr"]
             print('LR: %.4f' % lr)
@@ -186,11 +191,7 @@ class Trainer():
         labels.detach()
         return test_running_loss
 
-    def _write_swatches(
-            self,
-            swatches: gpd.GeoDataFrame,
-            epoch: int
-    ) -> None:
+    def _write_swatches(self, epoch: int) -> None:
         ramp = [
             (0, '#010101'),
             (1/3., '#ff0101'),
@@ -198,12 +199,13 @@ class Trainer():
             (1, '#ffff01')
         ]
         cm = LinearSegmentedColormap.from_list("urban", ramp)
-        for swatch in swatches:
+        for i, _ in self.swatches.iterrows():
+            swatch = self.swatches.loc[[i]]
             swatch_kwargs = self.dataset_kwargs.copy()
-            swatch_kwargs.update({'aoi': swatch})
+            swatch_kwargs.update({'aoi': swatch, 'mode': 'predict'})
             ds = Dataset(**swatch_kwargs)
             dl = DataLoader(ds, **self.dataloader_kwargs)
-            output_file = f'outputs/swatch_{swatch.name}_{epoch}.png'
+            output_file = f'outputs/swatch_{swatch.loc[0].name}_{epoch}.png'
             for i, data in enumerate(dl):
                 output_tensor = self.net(data.float().to(self.dev))
                 output_np = output_tensor.detach().cpu().numpy()
@@ -218,6 +220,8 @@ class Trainer():
                 y_range = ds.bounds[3] - ds.bounds[1]
                 n_rows = math.ceil(y_range / self.res)
                 output_np = np.empty((n_rows, n_cols))
+                print(output_np.shape)
+                print(window)
                 output_np[
                     window.col_off:window.col_off + window.width,
                     window.row_off:window.row_off + window.height

@@ -1,3 +1,4 @@
 epochs: 100
-training_samples: 100
-test_samples: 20
+training_samples: 10
+test_samples: 2
+learning_schedule_gamma: 0.99
