@@ -15,6 +15,7 @@ if __name__ == "__main__":
     config = ScriptRunConfig(
         source_directory='./src',
         script='model/train_azml.py',
+#        script='model/predict_mosaic.py',
         compute_target='gpu-cluster',
         arguments=[
             '--params-path',

@@ -12,6 +12,8 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 from PIL import Image
 import rasterio as rio
+from rasterio.mask import mask
+from shapely.geometry import box
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
@@ -23,7 +25,6 @@ from models.Unet_padded import Unet
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
-
 
 @dataclass
 class Trainer():
@@ -93,8 +94,10 @@ class Trainer():
         return self.learning_schedule_gamma ** epoch
 
     def _load_aoi(self, path, aoi_file: str) -> gpd.GeoDataFrame:
-        aoi_file = os.path.join(path, aoi_file)
-        return gpd.read_file(aoi_file)
+        if aoi_file is not None:
+            aoi_file = os.path.join(path, aoi_file)
+            return gpd.read_file(aoi_file)
+        return None
 
     def _get_training_raster_specs(self) -> int:
         with rio.open(self.training_file) as src:
@@ -104,6 +107,7 @@ class Trainer():
         return num_bands, res
 
     def _get_output_chip_size(self) -> int:
+        # Not to be confused with "good" area
         test_chip = torch.Tensor(
             1,
             self.num_training_bands,
@@ -161,8 +165,8 @@ class Trainer():
 
     def _train_step(self, loader: DataLoader) -> float:
         running_loss = 0.0
+        self.net.train()
         for i, data in enumerate(loader):
-            self.net.train()
             inputs, labels = data
             inputs = inputs.to(self.dev)
             labels = labels.to(self.dev)
@@ -179,8 +183,8 @@ class Trainer():
 
     def _eval_step(self) -> float:
         test_running_loss = 0.0
+        self.net.eval()
         for i, test_data in enumerate(self.test_loader):
-            self.net.eval()
             inputs, labels = test_data
             inputs = inputs.to(self.dev)
             labels = labels.to(self.dev)
@@ -199,35 +203,44 @@ class Trainer():
             (1, '#ffff01')
         ]
         cm = LinearSegmentedColormap.from_list("urban", ramp)
+        swatch_dataloader_kwargs = self.dataloader_kwargs.copy()
+        swatch_dataloader_kwargs.update({'batch_size': 1})
+        self.net.eval()
         for i, _ in self.swatches.iterrows():
             swatch = self.swatches.loc[[i]]
             swatch_kwargs = self.dataset_kwargs.copy()
             swatch_kwargs.update({'aoi': swatch, 'mode': 'predict'})
             ds = Dataset(**swatch_kwargs)
-            dl = DataLoader(ds, **self.dataloader_kwargs)
-            output_file = f'outputs/swatch_{swatch.loc[0].name}_{epoch}.png'
-            for i, data in enumerate(dl):
-                output_tensor = self.net(data.float().to(self.dev))
-                output_np = output_tensor.detach().cpu().numpy()
-                prediction = output_np[: 221:291, 221:291]
-                window = ds.get_cropped_window(i, self.output_chip_size)
-                # Figure out how to create this of the correct size
-                # I think what we need to do is get the resolution
-                # from the input raster, and the xmax and xmin from the
-                # ds, then ceiling(range / res)
-                x_range = ds.bounds[2] - ds.bounds[0]
-                n_cols = math.ceil(x_range / self.res)
-                y_range = ds.bounds[3] - ds.bounds[1]
-                n_rows = math.ceil(y_range / self.res)
-                output_np = np.empty((n_rows, n_cols))
-                print(output_np.shape)
-                print(window)
-                output_np[
-                    window.col_off:window.col_off + window.width,
-                    window.row_off:window.row_off + window.height
-                ] = prediction
-                rgb = Image.fromarray(np.uint8(cm(output_np)*255))
-                rgb.save(output_file)
+            dl = DataLoader(ds) #, **swatch_dataloader_kwargs)
+            with rio.open(self.training_file) as src:
+                kwargs = src.meta.copy()
+                out_array, transform = mask(src, [box(*ds.bounds)], crop=True)
+            kwargs.update({
+                'count': 1,
+                'dtype': 'float32',
+                'driver': 'GTiff',
+                'bounds': ds.bounds,
+                'height': out_array.shape[1],
+                'width': out_array.shape[2],
+                'transform': transform
+            })
+
+            output_file = f'outputs/swatch_{i}_{epoch}.tif'
+            swatch_np = np.empty((out_array.shape[1], out_array.shape[2]))
+            with rio.open(output_file, 'w', **kwargs) as dst:
+                for idx, data in enumerate(dl):
+                    output_tensor = self.net(data.float().to(self.dev))
+                    output_np = output_tensor.detach().cpu().numpy()
+                    prediction = output_np[0:1, 221:291, 221:291]
+                    window = ds.get_cropped_window(idx, 70, ds.aoi_transform)
+                    dst.write(prediction, window=window)
+                    swatch_np[
+                        window.col_off:window.col_off + window.width,
+                        window.row_off:window.row_off + window.height
+                    ] = prediction
+            output_png = f'outputs/swatch_{i}_{epoch}.png'
+            rgb = Image.fromarray(np.uint8(cm(swatch_np)*255))
+            rgb.save(output_png)
 
 
 if __name__ == '__main__':
