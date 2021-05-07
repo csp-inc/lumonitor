@@ -114,8 +114,10 @@ class MosaicDataset(Dataset):
             x = np.random.uniform(x_min, x_max, self.num_chips * 2)
             y = np.random.uniform(y_min, y_max, self.num_chips * 2)
             new_points = self._points_in_aoi(points(x, y))
-            upper_left_points = upper_left_points.append(new_points)
-            # ^^^^^ eye roll
+            upper_left_points = upper_left_points.append(
+                new_points,
+                ignore_index=True
+            )
 
         return upper_left_points[0:self.num_chips]
 
@@ -215,11 +217,13 @@ class MosaicDataset(Dataset):
                 {'indexes': self.label_band, 'window': label_window}
             )
 
-        imp_nodata_val = 127
+        # Don't know where these -1000 are coming from, but
+        # they are there on read
+        masked = (label_chip_raw > 100) | (label_chip_raw == -1000)
         return masked_array(
             label_chip_raw,
-            mask=label_chip_raw == imp_nodata_val
-        ).filled(0) / 100
+            mask=masked,
+        ).filled(0) / 100.0
         # Replace nodatas with 0,
         # then divide by 100 for real values
 

@@ -10,6 +10,7 @@ from azureml.core import Run
 import geopandas as gpd
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
+from pandas import DataFrame
 from PIL import Image
 import rasterio as rio
 from rasterio.mask import mask
@@ -25,6 +26,7 @@ from models.Unet_padded import Unet
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
+
 
 @dataclass
 class Trainer():
@@ -53,6 +55,12 @@ class Trainer():
         print('Using device:', self.dev)
         self.net = Unet(self.num_training_bands).float().to(self.dev)
         self.output_chip_size = self._get_output_chip_size()
+
+        self._loss = None
+        self._test_loss = None
+        self._lr = None
+        self._epoch = None
+        self.log_df = DataFrame(columns=['epoch', 'loss', 'test_loss', 'lr'])
 
         swatch_file = os.path.join(path, 'swatches.gpkg')
         self.swatches = gpd.read_file(swatch_file)
@@ -89,6 +97,56 @@ class Trainer():
             self.optimizer,
             lr_lambda=self._get_lr_lambda
         )
+
+    @property
+    def loss(self):
+        return self._loss
+
+    @loss.setter
+    def loss(self, value):
+        self._loss = value
+        print("Loss: %.4f" % value)
+        self.run.log("Training Loss", value)
+
+    @property
+    def test_loss(self):
+        return self._test_loss
+
+    @test_loss.setter
+    def test_loss(self, value):
+        self._test_loss = value
+        print("Test loss: %.4f" % value)
+        self.run.log("Test Loss", value)
+
+    @property
+    def epoch(self):
+        return self._epoch
+
+    @epoch.setter
+    def epoch(self, value):
+        self._epoch = value
+        print("Epoch: ", value)
+        self.run.log("Epoch", value)
+
+    @property
+    def lr(self):
+        return self._lr
+
+    @lr.setter
+    def lr(self, value):
+        self._lr = value
+        print('LR: %.4f' % value)
+        self.run.log("lr", value)
+
+    def _write_log(self) -> None:
+        row = dict(
+            epoch=self.epoch,
+            loss=self.loss,
+            test_loss=self.test_loss,
+            lr=self.lr
+        )
+        self.log_df = self.log_df.append(row, ignore_index=True)
+        self.log_df.to_csv('./outputs/log.csv', index=False)
 
     def _get_lr_lambda(self, epoch: int) -> float:
         return self.learning_schedule_gamma ** epoch
@@ -130,43 +188,40 @@ class Trainer():
         )
 
     def train(self):
-        for epoch in range(self.epochs):
-            np.random.seed(self.seed)
+        np.random.seed(self.seed)
+        for self.epoch in range(self.epochs):
 
             # Reset this at each epoch so samples change
             ds = self._get_ds()
             loader = self._get_loader(ds)
 
-            running_loss = self._train_step(loader)
+            try:
+                running_loss = self._train_step(loader)
+            except rio.errors.RasterioIOError as e:
+                print("Going to next epoch b/c of: ", e)
+                continue
 
-            train_loss = running_loss / self.training_samples
-            print('Epoch %d loss: %.4f' % (epoch + 1, train_loss))
+            self.loss = running_loss / self.training_samples
 
             with torch.no_grad():
-                test_running_loss = self._eval_step()
-                self._write_swatches(epoch)
+                try:
+                    test_running_loss = self._eval_step()
+                    self._write_swatches()
+                except rio.errors.RasterioIOError as e:
+                    print("Going to next epoch b/c of: ", e)
+                    continue
 
-            test_loss = test_running_loss / self.test_samples
-            print('Epoch %d test loss: %.4f' % (epoch + 1, test_loss))
-
-            run.log("epoch", epoch+1)
-            run.log("Training Loss", train_loss)
-            run.log("Test Loss", test_loss)
-
-            lr = self.optimizer.param_groups[0]["lr"]
-            print('LR: %.4f' % lr)
-            run.log("lr", lr)
+            self.test_loss = test_running_loss / self.test_samples
+            self.lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step()
 
-            # Just for testing, we dont' need to save GB of models
-            # ^^ Well then how do we go back?
-            # Only save the last one?
-            torch.save(self.net.state_dict(), f'./outputs/model.pt')
+            torch.save(self.net.state_dict(), './outputs/model.pt')
+            self._write_log()
 
     def _train_step(self, loader: DataLoader) -> float:
         running_loss = 0.0
         self.net.train()
-        for i, data in enumerate(loader):
+        for _, data in enumerate(loader):
             inputs, labels = data
             inputs = inputs.to(self.dev)
             labels = labels.to(self.dev)
@@ -184,7 +239,7 @@ class Trainer():
     def _eval_step(self) -> float:
         test_running_loss = 0.0
         self.net.eval()
-        for i, test_data in enumerate(self.test_loader):
+        for _, test_data in enumerate(self.test_loader):
             inputs, labels = test_data
             inputs = inputs.to(self.dev)
             labels = labels.to(self.dev)
@@ -195,7 +250,7 @@ class Trainer():
         labels.detach()
         return test_running_loss
 
-    def _write_swatches(self, epoch: int) -> None:
+    def _write_swatches(self) -> None:
         ramp = [
             (0, '#010101'),
             (1/3., '#ff0101'),
@@ -211,6 +266,7 @@ class Trainer():
             swatch_kwargs = self.dataset_kwargs.copy()
             swatch_kwargs.update({'aoi': swatch, 'mode': 'predict'})
             ds = Dataset(**swatch_kwargs)
+            print(ds.num_chips)
             dl = DataLoader(ds) #, **swatch_dataloader_kwargs)
             with rio.open(self.training_file) as src:
                 kwargs = src.meta.copy()
@@ -225,7 +281,7 @@ class Trainer():
                 'transform': transform
             })
 
-            output_file = f'outputs/swatch_{i}_{epoch}.tif'
+            output_file = f'outputs/swatch_{i}_{self.epoch}.tif'
             swatch_np = np.empty((out_array.shape[1], out_array.shape[2]))
             with rio.open(output_file, 'w', **kwargs) as dst:
                 for idx, data in enumerate(dl):
@@ -235,10 +291,11 @@ class Trainer():
                     window = ds.get_cropped_window(idx, 70, ds.aoi_transform)
                     dst.write(prediction, window=window)
                     swatch_np[
-                        window.col_off:window.col_off + window.width,
-                        window.row_off:window.row_off + window.height
+                        window.row_off:window.row_off + window.height,
+                        window.col_off:window.col_off + window.width
                     ] = prediction
-            output_png = f'outputs/swatch_{i}_{epoch}.png'
+            output_png = f'outputs/swatch_{i}_{self.epoch}.png'
+            print(swatch_np)
             rgb = Image.fromarray(np.uint8(cm(swatch_np)*255))
             rgb.save(output_png)
 
