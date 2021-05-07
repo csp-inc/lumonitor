@@ -8,45 +8,25 @@ import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
 import torch.optim as optim
-import xarray as xr
 
-from datasets.LuDataset import LuDataset as Dataset
+from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
 
-cog_dir = 'data/cog/2016/training'
-image_files = [
-    os.path.join(cog_dir, f)
-    for f in os.listdir(cog_dir)
-    if not f.startswith('hm')
-]
+training_file = 'data/conus_hls_median_2016.vrt'
+label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
 
-random.shuffle(image_files)
-n_training_files = math.ceil(len(image_files) * 0.8)
-
-training_files = image_files[:n_training_files]
-tiles = [os.path.splitext(os.path.basename(f))[0] for f in training_files]
-label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in tiles]
-
-test_files = image_files[n_training_files:]
-test_tiles = [os.path.splitext(os.path.basename(f))[0] for f in test_files]
-test_label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in test_tiles]
-
-# Can go ~25 w/ zero padding, ~16 w/ reflect
-BATCH_SIZE = 6
-N_CHIPS_PER_TILE = 100
+BATCH_SIZE = 1
+CHIP_SIZE = 512
 EPOCHS = 50
-N_TILES = len(tiles)
-N_BANDS = 7
-N_SAMPLES_PER_EPOCH = N_CHIPS_PER_TILE * N_TILES
+N_SAMPLES_PER_EPOCH = 1000
+N_TEST_SAMPLES_PER_EPOCH = 100
+
 N_WORKERS = 6
 
-CHIP_SIZE = 512
-N_TEST_TILES = len(test_files)
-N_TEST_CHIPS_PER_TILE = 25
-N_TEST_SAMPLES_PER_EPOCH = N_TEST_CHIPS_PER_TILE * N_TEST_TILES
-
-LABEL_BAND = 6
+N_BANDS = 7
 net = Unet(N_BANDS)
+
+LABEL_BAND = 1
 
 test_chip = torch.Tensor(1, N_BANDS, CHIP_SIZE, CHIP_SIZE)
 OUTPUT_CHIP_SIZE = net.forward(test_chip).shape[2]
@@ -54,13 +34,14 @@ OUTPUT_CHIP_SIZE = net.forward(test_chip).shape[2]
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
+
 szd = Dataset(
-    training_files,
-    label_files,
+    training_file,
+    label_file,
     label_band=LABEL_BAND,
     feature_chip_size=CHIP_SIZE,
     label_chip_size=OUTPUT_CHIP_SIZE,
-    num_chips_per_tile=N_CHIPS_PER_TILE
+    num_chips=N_SAMPLES_PER_EPOCH
 )
 
 loader = DataLoader(
@@ -73,12 +54,12 @@ loader = DataLoader(
 )
 
 testsd = Dataset(
-        test_files,
-        test_label_files,
-        label_band=LABEL_BAND,
-        feature_chip_size=CHIP_SIZE,
-        label_chip_size=OUTPUT_CHIP_SIZE,
-        num_chips_per_tile=N_TEST_CHIPS_PER_TILE
+    training_file,
+    label_file,
+    label_band=LABEL_BAND,
+    feature_chip_size=CHIP_SIZE,
+    label_chip_size=OUTPUT_CHIP_SIZE,
+    num_chips=N_TEST_SAMPLES_PER_EPOCH
 )
 
 test_loader = DataLoader(

@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 #from SerialStreamingDataset import SerialStreamingDataset
-from LuDataset import LuDataset as Dataset
+from datasets.LuDataset import LuDataset as Dataset
 
 cog_dir = 'data/cog/2016/training'
 image_files = [
@@ -21,7 +21,7 @@ label_files = [os.path.join(cog_dir, 'hm_' + t + '.tif') for t in tiles]
 LABEL_BAND = 6
 CHIP_SIZE = 512
 OUTPUT_CHIP_SIZE = 512
-N_CHIPS_PER_TILE = 5
+N_CHIPS_PER_TILE = 100
 
 ds = Dataset(
     training_files,
@@ -48,4 +48,4 @@ loader = DataLoader(
 for epoch in range(1, 3):
     print('epock')
     for i, data in enumerate(loader):
-        print(data)
+        print(i)

@@ -1,67 +1,82 @@
+import argparse
 import os
 
 import ee
-import geopandas as gpd
-import xarray as xr
+import fsspec
+import rasterio as rio
 
 ee.Initialize()
 
-from HLSTileLookup import HLSTileLookup
+parser = argparse.ArgumentParser()
+parser.add_argument('--account-name')
+parser.add_argument('--account-key')
 
-def export_tile_for_ee_image(ee_image, xmin, ymax, epsg, tile_id, prefix):
-    # I wonder if we should hardcore these from the tile info?
-    res = 30
-    cells = 3660
-    diff = res * cells
-    xmax = xmin + diff
-    ymin = ymax - diff
-    epsg_string = 'EPSG:' + str(epsg)
+args = parser.parse_args()
+
+os.environ['AZURE_STORAGE_ACCOUNT'] = args.account_name
+os.environ['AZURE_STORAGE_ACCESS_KEY'] = args.account_key
+
+def export_training_data(raster, output_prefix):
+    cells = raster.profile['width']
+
+    bounds = list(raster.bounds)
+    epsg_string = f'EPSG:{raster.crs.to_epsg()}'
     projection = ee.Projection(epsg_string)
-    tile = ee.Geometry.Rectangle([xmin, ymin, xmax, ymax], projection, False)
+    tile = ee.Geometry.Rectangle(bounds, projection, False)
+
+    hm = ee.Image('projects/GEE_CSP/HM/HM_ee_2017_v014_500_30').multiply(10000).int16()
+
+    nlcd = ee.Image('USGS/NLCD/NLCD2016')
+    nlcd_imp_d = nlcd.select('impervious_descriptor').int16()
+    nlcd_imp = nlcd.select('impervious').int16()
+
+    hm = hm.addBands(nlcd_imp_d)
+    hm = hm.addBands(nlcd_imp)
 
     task = ee.batch.Export.image.toCloudStorage(
-        image=ee_image,
+        image=hm,
         bucket='lumonitor',
-        fileNamePrefix=os.path.join('hls_tiles', prefix + '_' + tile_id),
+        fileNamePrefix=output_prefix,
         dimensions=cells,
         region=tile,
         crs=epsg_string
         )
+
     task.start()
 
-def export_tiles(ee_image, tile_info):
-    for _, row in tile_info.iterrows():
-        export_tile_for_ee_image(
-            ee_image=ee_image,
-            xmin=row['Xstart'],
-            ymax=row['Ystart'],
-            epsg=row['EPSG'],
-            tile_id=row['TilID'],
-            prefix='hm'
-        )
 
-def export_tiles_for_aoi(ee_image, aoi):
-    tile_lookup = HLSTileLookup()
-    tile_df = tile_lookup.get_geometry_hls_tile_info(aoi)
-    export_tiles(ee_image, tile_df)
-
-def export_tiles_for_tile_ids(ee_image, tile_ids):
-    tile_lookup = HLSTileLookup()
-    tile_df = tile_lookup.get_hls_tile_info(tile_ids)
-    export_tiles(ee_image, tile_df)
+def get_label_for_trainer(training_cog):
+    _, _, year, _, cog_file = training_cog.split('/')
+    return f'lumonitor/cog/{year}/training/l{cog_file}'
 
 
-cog_dir = 'data/cog/2016'
-cogs = [os.path.join(cog_dir, f) for f in os.listdir(cog_dir)]
-tile_ids = [os.path.splitext(os.path.basename(f))[0] for f in cogs]
+def get_labels_for_trainers(training_cogs):
+    return set([get_label_for_trainer(c) for c in training_cogs])
 
-hm = ee.Image('projects/GEE_CSP/HM/HM_ee_2017_v014_500_30')
-nlcd_imp = ee.Image('USGS/NLCD/NLCD2016').select('impervious').divide(100).float()
-hm = hm.addBands(nlcd_imp)
 
-export_tiles_for_tile_ids(hm, tile_ids)
+def get_trainer_for_label(label_cog):
+    _, _, year, _, file = label_cog.split('/')
+    training_file = file[1:]
+    return f'/vsiaz/hls/cog/{year}/training/{training_file}'
 
-# Yes i know i will fix this
-# aoi = gpd.read_file('/home/csp/Projects/thirty-by-thirty/data/aoi_conus.geojson')
-# export_tiles_for_ee_image(hm, aoi)
 
+az_fs = fsspec.filesystem(
+    'az',
+    account_name=args.account_name,
+    account_key=args.account_key
+)
+
+gcs_fs = fsspec.filesystem('gcs')
+
+
+training_cogs = set(az_fs.find('hls/cog'))
+label_cogs_for_training_cogs = get_labels_for_trainers(training_cogs)
+label_cogs = set(gcs_fs.find('lumonitor/cog'))
+
+label_cogs_to_run = label_cogs_for_training_cogs - label_cogs
+
+for output_cog in label_cogs_to_run:
+    training_path = get_trainer_for_label(output_cog)
+    print(training_path)
+    training_rio = rio.open(training_path)
+    export_training_data(training_rio, output_cog)

@@ -1,0 +1,5 @@
+epochs: 100
+training_samples: 10000
+test_samples: 2000
+learning_rate: 0.01
+learning_schedule_gamma: 0.99

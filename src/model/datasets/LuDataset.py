@@ -36,6 +36,7 @@ class LuDataset(Dataset):
 
         x = np.random.randint(0, img_ds.shape[0] - self.feature_chip_size)
         y = np.random.randint(0, img_ds.shape[1] - self.feature_chip_size)
+
         window = Window(
             x,
             y,
