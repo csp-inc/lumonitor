@@ -12,12 +12,12 @@ TAG=$(DOCKER_USER)/$(PROJECT_NAME):$(DOCKER_IMG_VERSION)
 .DEFAULT_GOAL := nothing
 
 # Feel free to find a better way for this one
-nothing: Dockerfile.built
+nothing: Dockerfile.built requirements.txt
 	source src/docker/docker_shell.sh $(MAKE) $(TAG)
 
 %: Dockerfile.built
 	source src/docker/docker_shell.sh $(MAKE) $@ $(TAG)
 	
 # Result is a dummy file that should NOT be in versioning.
-%.built: %
+%.built: % requirements.txt
 	source src/docker/build_docker_image.sh $< $(TAG) $@

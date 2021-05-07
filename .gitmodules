@@ -1,3 +1,0 @@
-[submodule "src/hls_tooling"]
-	path = src/hls_tooling
-	url = git@github.com:csp-inc/data-ingestion
