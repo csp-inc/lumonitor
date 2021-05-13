@@ -37,7 +37,8 @@ class Trainer():
     learning_schedule_gamma: float = 0.975
     momentum: float = 0.8
     chip_size: int = 512
-    aoi_file: str = 'conus.geojson'
+    training_aoi_file: str = 'conus.geojson'
+    test_aoi_file: str = 'conus.geojson'
     batch_size: int = 8
     num_workers: int = 6
     seed: int = 1337
@@ -49,7 +50,8 @@ class Trainer():
 
         self.training_file = os.path.join(path, 'conus_hls_median_2016.vrt')
         self.label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
-        self.aoi = self._load_aoi(path, self.aoi_file)
+        self.training_aoi = self._load_aoi(path, self.training_aoi_file)
+        self.test_aoi = self._load_aoi(path, self.test_aoi_file)
         self.num_training_bands, self.res = self._get_training_raster_specs()
         self.dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print('Using device:', self.dev)
@@ -69,7 +71,6 @@ class Trainer():
             'feature_file': self.training_file,
             'feature_chip_size': self.chip_size,
             'output_chip_size': self.output_chip_size,
-            'aoi': self.aoi,
             'label_file': self.label_file
         }
         self.dataloader_kwargs = {
@@ -78,15 +79,17 @@ class Trainer():
             'pin_memory': True,
             'worker_init_fn': worker_init_fn
         }
-        self.test_ds = Dataset(
-            num_training_chips=self.test_samples,
-            **self.dataset_kwargs
-        )
+
         self.test_loader = DataLoader(
-            self.test_ds,
+            Dataset(
+                num_training_chips=self.test_samples,
+                aoi=self.test_aoi,
+                **self.dataset_kwargs
+            ),
             shuffle=False,
             **self.dataloader_kwargs
         )
+
         self.criterion = nn.MSELoss()
         self.optimizer = optim.SGD(
             self.net.parameters(),
@@ -174,9 +177,15 @@ class Trainer():
         ).to(self.dev)
         return self.net.forward(test_chip).shape[2]
 
-    def _get_ds(self) -> Dataset:
+    def _get_training_ds(self) -> Dataset:
+        if self.epoch > 10:
+            aoi = self.test_aoi
+        else:
+            aoi = self.training_aoi
+
         return Dataset(
             num_training_chips=self.training_samples,
+            aoi=aoi,
             **self.dataset_kwargs
         )
 
@@ -189,27 +198,20 @@ class Trainer():
 
     def train(self):
         np.random.seed(self.seed)
+        torch.manual_seed(self.seed)
         for self.epoch in range(self.epochs):
 
             # Reset this at each epoch so samples change
-            ds = self._get_ds()
+            ds = self._get_training_ds()
             loader = self._get_loader(ds)
 
-            try:
-                running_loss = self._train_step(loader)
-            except rio.errors.RasterioIOError as e:
-                print("Going to next epoch b/c of: ", e)
-                continue
+            running_loss = self._train_step(loader)
 
             self.loss = running_loss / self.training_samples
 
             with torch.no_grad():
-                try:
-                    test_running_loss = self._eval_step()
-                    self._write_swatches()
-                except rio.errors.RasterioIOError as e:
-                    print("Going to next epoch b/c of: ", e)
-                    continue
+                test_running_loss = self._eval_step()
+                self._write_swatches()
 
             self.test_loss = test_running_loss / self.test_samples
             self.lr = self.optimizer.param_groups[0]["lr"]
@@ -228,6 +230,7 @@ class Trainer():
             self.optimizer.zero_grad()
 
             outputs = self.net(inputs.float())
+
             loss = self.criterion(outputs.squeeze(1), labels.float())
             loss.backward()
             self.optimizer.step()
@@ -242,8 +245,13 @@ class Trainer():
         for _, test_data in enumerate(self.test_loader):
             inputs, labels = test_data
             inputs = inputs.to(self.dev)
+            # print('input (1st band)', inputs[0, 0, :, :])
+            # print('input has nan ', any(torch.isnan(torch.flatten(inputs))))
             labels = labels.to(self.dev)
+            # print('label', labels[0, :, :])
+            # print('label has nan ', any(torch.isnan(torch.flatten(labels))))
             outputs = self.net(inputs.float())
+            # print('output', outputs[0, 0, :, :])
             loss = self.criterion(outputs.squeeze(1), labels.float())
             test_running_loss += loss.item() * self.batch_size
         inputs.detach()
@@ -295,7 +303,6 @@ class Trainer():
                         window.col_off:window.col_off + window.width
                     ] = prediction
             output_png = f'outputs/swatch_{i}_{self.epoch}.png'
-            print(swatch_np)
             rgb = Image.fromarray(np.uint8(cm(swatch_np)*255))
             rgb.save(output_png)
 
