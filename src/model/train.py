@@ -27,6 +27,15 @@ from models.Unet_padded import Unet
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
 
+def set_seed(seed: int) -> None:
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 @dataclass
 class Trainer():
@@ -54,6 +63,8 @@ class Trainer():
         self.test_aoi = self._load_aoi(path, self.test_aoi_file)
         self.num_training_bands, self.res = self._get_training_raster_specs()
         self.dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        set_seed(self.seed)
+
         print('Using device:', self.dev)
         self.net = Unet(self.num_training_bands).float().to(self.dev)
         self.output_chip_size = self._get_output_chip_size()
@@ -197,8 +208,6 @@ class Trainer():
         )
 
     def train(self):
-        np.random.seed(self.seed)
-        torch.manual_seed(self.seed)
         for self.epoch in range(self.epochs):
 
             # Reset this at each epoch so samples change
@@ -223,7 +232,7 @@ class Trainer():
     def _train_step(self, loader: DataLoader) -> float:
         running_loss = 0.0
         self.net.train()
-        for _, data in enumerate(loader):
+        for _, (idxs, data) in enumerate(loader):
             inputs, labels = data
             inputs = inputs.to(self.dev)
             labels = labels.to(self.dev)
@@ -242,7 +251,7 @@ class Trainer():
     def _eval_step(self) -> float:
         test_running_loss = 0.0
         self.net.eval()
-        for _, test_data in enumerate(self.test_loader):
+        for _, (idxs, test_data) in enumerate(self.test_loader):
             inputs, labels = test_data
             inputs = inputs.to(self.dev)
             # print('input (1st band)', inputs[0, 0, :, :])
@@ -275,7 +284,8 @@ class Trainer():
             swatch_kwargs.update({'aoi': swatch, 'mode': 'predict'})
             ds = Dataset(**swatch_kwargs)
             print(ds.num_chips)
-            dl = DataLoader(ds) #, **swatch_dataloader_kwargs)
+            # This may need to be different for prediction, not sure (prob. not)
+            dl = DataLoader(ds, batch_size=self.batch_size)
             with rio.open(self.training_file) as src:
                 kwargs = src.meta.copy()
                 out_array, transform = mask(src, [box(*ds.bounds)], crop=True)
@@ -292,16 +302,25 @@ class Trainer():
             output_file = f'outputs/swatch_{i}_{self.epoch}.tif'
             swatch_np = np.empty((out_array.shape[1], out_array.shape[2]))
             with rio.open(output_file, 'w', **kwargs) as dst:
-                for idx, data in enumerate(dl):
+                for _, (ds_idxes, data) in enumerate(dl):
                     output_tensor = self.net(data.float().to(self.dev))
                     output_np = output_tensor.detach().cpu().numpy()
-                    prediction = output_np[0:1, 221:291, 221:291]
-                    window = ds.get_cropped_window(idx, 70, ds.aoi_transform)
-                    dst.write(prediction, window=window)
-                    swatch_np[
-                        window.row_off:window.row_off + window.height,
-                        window.col_off:window.col_off + window.width
-                    ] = prediction
+                    for j, idx_tensor in enumerate(ds_idxes):
+                        if len(output_np.shape) > 3:
+                            prediction = output_np[j, 0:1, 221:291, 221:291]
+                        else:
+                            prediction = output_np[0:1, 221:291, 221:291]
+
+                        window = ds.get_cropped_window(
+                            idx_tensor.detach().cpu().numpy(),
+                            70,
+                            ds.aoi_transform
+                        )
+                        dst.write(prediction, window=window)
+                        swatch_np[
+                            window.row_off:window.row_off + window.height,
+                            window.col_off:window.col_off + window.width
+                        ] = prediction
             output_png = f'outputs/swatch_{i}_{self.epoch}.png'
             rgb = Image.fromarray(np.uint8(cm(swatch_np)*255))
             rgb.save(output_png)

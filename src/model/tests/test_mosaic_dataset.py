@@ -1,7 +1,9 @@
 import os
+import random
 
 import geopandas as gpd
 import numpy as np
+import torch
 from torch.utils.data import DataLoader
 
 from datasets.MosaicDataset import MosaicDataset as Dataset
@@ -13,33 +15,48 @@ aoi = aoi[aoi.NAME == 'Vermont']
 
 
 LABEL_BAND = 1
-CHIP_SIZE = 512
-OUTPUT_CHIP_SIZE = 512
+
+def set_seed(seed: int) -> None:
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+set_seed(1337)
 
 ds = Dataset(
     feature_file=training_file,
-    feature_chip_size=CHIP_SIZE,
     aoi=aoi,
     label_file=label_file,
-    label_band=LABEL_BAND,
-    output_chip_size=OUTPUT_CHIP_SIZE,
-    num_training_chips=1000,
+    num_training_chips=10,
 )
 
 def worker_init_fn(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
     # ONLY Ensures different workers get different x's and y's
-    np.random.seed(np.random.get_state()[1][0] + worker_id)
-
-
-loader = DataLoader(
-    ds,
-    num_workers=1,
-    batch_size=1,
-    worker_init_fn=worker_init_fn,
-    shuffle=True
-)
+#    np.random.seed(np.random.get_state()[1][0] + worker_id)
 
 for epoch in range(1, 3):
     print('epoch')
-    for i, data in enumerate(loader):
-        print(data)
+    ds = Dataset(
+        feature_file=training_file,
+        aoi=aoi,
+        label_file=label_file,
+        num_training_chips=10,
+    )
+    loader = DataLoader(
+        ds,
+        num_workers=2,
+        batch_size=1,
+        worker_init_fn=worker_init_fn,
+        shuffle=True
+    )
+
+    for i, (idx, window) in enumerate(loader):
+        print(window)

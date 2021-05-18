@@ -2,6 +2,8 @@ import argparse
 import os
 
 from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
+from azureml.core.runconfig import PyTorchConfiguration
+
 import yaml
 
 if __name__ == "__main__":
@@ -12,11 +14,14 @@ if __name__ == "__main__":
         name="lumonitor-conus-impervious-2016"
     )
 
+    distr_config = PyTorchConfiguration(node_count=15)
+
     config = ScriptRunConfig(
         source_directory='./src',
-        script='model/train.py',
-#        script='model/predict_mosaic.py',
+#        script='model/train.py',
+        script='model/predict.py',
         compute_target='gpu-cluster',
+        distributed_job_config=distr_config,
         arguments=[
             '--params-path',
             'model/configs/conus-impervious-2016.yml'

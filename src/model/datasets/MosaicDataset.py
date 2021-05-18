@@ -256,7 +256,7 @@ class MosaicDataset(Dataset):
             else:
                 raise e
 
-        return item
+        return (idx, item)
 
     def __len__(self) -> int:
         return self.num_chips
