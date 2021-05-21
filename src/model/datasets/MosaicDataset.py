@@ -99,6 +99,7 @@ class MosaicDataset(Dataset):
         return None
 
     def _get_indices(self):
+        # returns (pd.Series, pd.Series)
         if self.mode == "train":
             upper_left_points = self._get_random_points()
 #            GeoDataFrame(geometry=upper_left_points, crs=self.crs).to_file('test_pts.shp')
@@ -205,6 +206,7 @@ class MosaicDataset(Dataset):
     def _read_chip(self, ds, kwargs):
         return ds.read(**kwargs)
 
+    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
     def _get_img_chip(self, window: Window):
         with rio.open(self.feature_file) as img_ds:
             img_chip = self._read_chip(
@@ -260,3 +262,9 @@ class MosaicDataset(Dataset):
 
     def __len__(self) -> int:
         return self.num_chips
+
+    def subset(self, start_idx: int, end_idx: int) -> None:
+        self.chip_xs = self.chip_xs[start_idx:end_idx].reset_index(drop=True)
+        self.chip_ys = self.chip_ys[start_idx:end_idx].reset_index(drop=True)
+        self.num_chips = len(self.chip_xs)
+

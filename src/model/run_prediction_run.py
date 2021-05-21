@@ -16,18 +16,6 @@ if __name__ == "__main__":
         name="lumonitor-conus-impervious-2016"
     )
 
-    distr_config = PyTorchConfiguration(node_count=20)
-
-    config = ScriptRunConfig(
-        source_directory='./src',
-        script='model/predict2.py',
-        compute_target='gpu-cluster',
-        distributed_job_config=distr_config,
-        arguments=[
-            '--model_id', model_id,
-        ]
-    )
-
     env = Environment("lumonitor")
     env.docker.enabled = True
     env.docker.base_image = "cspincregistry.azurecr.io/lumonitor-azml:latest"
@@ -41,9 +29,21 @@ if __name__ == "__main__":
         AZURE_STORAGE_ACCESS_KEY=os.environ['AZURE_STORAGE_ACCESS_KEY']
     )
 
-    config.run_config.environment = env
+    for f in os.listdir('data/azml/slices'):
+        aoi = os.path.join('data/azml/slices/', f)
+        config = ScriptRunConfig(
+            source_directory='./src',
+            script='model/predict2.py',
+            compute_target='gpu-cluster2',
+            arguments=[
+                '--model_id', model_id,
+                '--aoi', aoi,
+            ]
+        )
 
-    run = experiment.submit(config)
+        config.run_config.environment = env
+
+        run = experiment.submit(config)
 #    run.wait_for_completion(wait_post_processing=True)
 #    time.sleep(100)
 #    print('starting copy')

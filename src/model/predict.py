@@ -24,11 +24,11 @@ def predict(model_id: str) -> None:
     feature_file = os.path.join(path, 'conus_hls_median_2016.vrt')
     model_id = 'lumonitor-conus-impervious-2016_1620952711_8aebb74b'
 
-#    state_file = os.path.join(path, 'cb_2019_us_state_5m.zip')
-#    states = gpd.read_file(state_file)
-#    aoi = states[states['NAME'] == 'Vermont']
-    conus_file = os.path.join(path, 'conus.geojson')
-    aoi = gpd.read_file(conus_file)
+    state_file = os.path.join(path, 'cb_2019_us_state_5m.zip')
+    states = gpd.read_file(state_file)
+    aoi = states[states['NAME'] == 'Vermont']
+#    conus_file = os.path.join(path, 'conus.geojson')
+#    aoi = gpd.read_file(conus_file)
 
     OUTPUT_CHIP_SIZE = 70
 
@@ -45,8 +45,8 @@ def predict(model_id: str) -> None:
         rank = int(os.environ["RANK"])
         this_row = rank // n_cols
         this_col = rank % n_cols
-        i_xmin = xmin + this_row * side_length
-        i_ymin = ymin + this_col * side_length
+        i_xmin = xmin + this_col * side_length
+        i_ymin = ymin + this_row * side_length
         i_xmax = i_xmin + side_length
         i_ymax = i_ymin + side_length
         aoi = gpd.GeoDataFrame(
@@ -63,7 +63,7 @@ def predict(model_id: str) -> None:
     )
 
     print("num chips", pds.num_chips)
-    loader = DataLoader(pds, batch_size=10, num_workers=6)
+    loader = DataLoader(pds, batch_size=10, num_workers=7)
 
     if torch.cuda.is_available():
         dev = "cuda"
@@ -103,27 +103,27 @@ def predict(model_id: str) -> None:
         'nodata': 127
     })
 
-#    with rio.open(output_file, 'w', **kwargs) as dst:
-#        for _, (ds_idxes, data) in enumerate(loader):
-#            output = model(data.half().to(dev))
-#            data.detach()
-#            output_np = round(output.detach().cpu().numpy() * 100).astype('uint8')
-#
-#            for j, idx_tensor in enumerate(ds_idxes):
-#                idx = idx_tensor.detach().cpu().numpy()
-#                if idx % 1000 == 0:
-#                    print(idx)
-#                if len(output_np.shape) > 3:
-#                    prediction = output_np[j, 0:1, 221:291, 221:291]
-#                else:
-#                    prediction = output_np[0:1, 221:291, 221:291]
-#
-#                window = pds.get_cropped_window(
-#                    idx,
-#                    OUTPUT_CHIP_SIZE,
-#                    pds.aoi_transform
-#                )
-#                dst.write(prediction, window=window)
+    with rio.open(output_file, 'w', **kwargs) as dst:
+        for _, (ds_idxes, data) in enumerate(loader):
+            output = model(data.half().to(dev))
+            data.detach()
+            output_np = round(output.detach().cpu().numpy() * 100).astype('uint8')
+
+            for j, idx_tensor in enumerate(ds_idxes):
+                idx = idx_tensor.detach().cpu().numpy()
+                if idx % 1000 == 0:
+                    print(idx)
+                if len(output_np.shape) > 3:
+                    prediction = output_np[j, 0:1, 221:291, 221:291]
+                else:
+                    prediction = output_np[0:1, 221:291, 221:291]
+
+                window = pds.get_cropped_window(
+                    idx,
+                    OUTPUT_CHIP_SIZE,
+                    pds.aoi_transform
+                )
+                dst.write(prediction, window=window)
 
 
 if __name__ == '__main__':
