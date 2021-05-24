@@ -3,12 +3,10 @@ import os
 import time
 
 from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
-from azureml.core.runconfig import PyTorchConfiguration
 
 import yaml
 
 if __name__ == "__main__":
-    model_id = 'lumonitor-conus-impervious-2016_1620952711_8aebb74b'
 
     ws = Workspace.from_config()
     experiment = Experiment(
@@ -29,21 +27,33 @@ if __name__ == "__main__":
         AZURE_STORAGE_ACCESS_KEY=os.environ['AZURE_STORAGE_ACCESS_KEY']
     )
 
-    for f in os.listdir('data/azml/slices'):
-        aoi = os.path.join('data/azml/slices/', f)
-        config = ScriptRunConfig(
-            source_directory='./src',
-            script='model/predict2.py',
-            compute_target='gpu-cluster2',
-            arguments=[
-                '--model_id', model_id,
-                '--aoi', aoi,
-            ]
-        )
+    run_ids = []
+    files = os.listdir('data/azml/slices')
+#    files = [ 'conus_67.geojson', 'conus_68.geojson', 'conus_104.geojson']
 
-        config.run_config.environment = env
+    model_id = 'lumonitor-conus-impervious-2016_1620952711_8aebb74b'
+    # No dir on this
+    feature_file = 'conus_hls_median_2013.vrt'
+    with open('data/slice_ids_2013.txt', 'a+') as dst:
+        for file in files:
+            print(file)
+            aoi = os.path.join('model/data/azml/slices/', file)
+            config = ScriptRunConfig(
+                source_directory='./src',
+                script='model/predict.py',
+                compute_target='gpu-cluster',
+                arguments=[
+                    '--model_id', model_id,
+                    '--aoi', aoi,
+                    '--feature_file', feature_file
+                ]
+            )
 
-        run = experiment.submit(config)
+            config.run_config.environment = env
+
+            run = experiment.submit(config)
+            run_id = run.id
+            dst.write('%s\n' % run_id)
 #    run.wait_for_completion(wait_post_processing=True)
 #    time.sleep(100)
 #    print('starting copy')

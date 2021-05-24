@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 
+from affine import Affine
 from azureml.core import Run, Workspace
 import geopandas as gpd
 from numpy import round
@@ -16,54 +17,60 @@ from torch.utils.data import DataLoader
 from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
 
-def predict(model_id: str) -> None:
+def get_output_specs(raster_file, dataset):
+    """Used to do this with rasterio mask, but that required
+       reading the whole file"""
+    with rio.open(raster_file) as src:
+        image_xmin, image_ymin, _, _ = src.bounds
+        res = src.res[0]
+        transform = src.transform
+
+    area_xmin, area_ymin, area_xmax, area_ymax = dataset.bounds
+
+    xmin = image_xmin + ((area_xmin - image_xmin) // res) * res
+    xmax = xmin + math.ceil((area_xmax - xmin) / res) * res
+    # this _should_ be a multiple of res
+    width = int((xmax - xmin) / res)
+
+    ymin = image_ymin + ((area_ymin - image_ymin) // res) * res
+    ymax = ymin + math.ceil((area_ymax - ymin) / res) * res
+    height = int((ymax - ymin) / res)
+
+    transform = Affine(
+        transform.a,
+        transform.b,
+        xmin,
+        transform.d,
+        transform.e,
+        ymax
+    )
+        
+    return (xmin, ymin, xmax, ymax), height, width, transform
+
+def predict(model_id: str, aoi_file: str, feature_file: str) -> None:
     run = Run.get_context()
     offline = run._run_id.startswith("OfflineRun")
     path = 'data/azml' if offline else 'model/data/azml'
 
-    feature_file = os.path.join(path, 'conus_hls_median_2016.vrt')
     model_id = 'lumonitor-conus-impervious-2016_1620952711_8aebb74b'
 
-    state_file = os.path.join(path, 'cb_2019_us_state_5m.zip')
-    states = gpd.read_file(state_file)
-    aoi = states[states['NAME'] == 'Vermont']
-#    conus_file = os.path.join(path, 'conus.geojson')
-#    aoi = gpd.read_file(conus_file)
+    aoi = gpd.read_file(aoi_file)
 
     OUTPUT_CHIP_SIZE = 70
 
-    world_size = int(os.environ["WORLD_SIZE"])
+#    number = re.sub('^.*_(.*)\..*$', '\\1', j)
+    file_id = os.path.splitext(os.path.basename(aoi_file))[0]
+    output_file = f'outputs/prediction_{file_id}.tif'
 
-    output_file = 'outputs/prediction.tif'
-
-    if world_size > 1:
-        xmin, ymin, xmax, ymax = aoi.total_bounds
-        width = xmax - xmin
-        height = ymax - ymin
-        side_length = math.sqrt(height * width / world_size)
-        n_cols = math.ceil(width / side_length)
-        rank = int(os.environ["RANK"])
-        this_row = rank // n_cols
-        this_col = rank % n_cols
-        i_xmin = xmin + this_col * side_length
-        i_ymin = ymin + this_row * side_length
-        i_xmax = i_xmin + side_length
-        i_ymax = i_ymin + side_length
-        aoi = gpd.GeoDataFrame(
-            geometry=[box(i_xmin, i_ymin, i_xmax, i_ymax)],
-            crs=aoi.crs
-        )
-        aoi.to_file(f'outputs/prediction_{rank}.shp')
-        output_file = f'outputs/prediction_{rank}.tif'
-
+    feature_path = os.path.join(path, feature_file)
     pds = Dataset(
-        feature_file,
+        feature_path,
         aoi=aoi,
         mode="predict"
     )
 
     print("num chips", pds.num_chips)
-    loader = DataLoader(pds, batch_size=10, num_workers=7)
+    loader = DataLoader(pds, batch_size=10, num_workers=6)
 
     if torch.cuda.is_available():
         dev = "cuda"
@@ -71,13 +78,13 @@ def predict(model_id: str) -> None:
         dev = "cpu"
 
     model = Unet(7)
-    model_file = os.path.join(path, f'{model_id}.pt')
+    model_path = os.path.join(path, f'{model_id}.pt')
 
-    model.load_state_dict(torch.load(model_file, map_location=torch.device(dev)))
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(dev)))
     model.half().to(dev)
     model.eval()
 
-    with rio.open(feature_file) as src:
+    with rio.open(feature_path) as src:
         kwargs = src.meta.copy()
         kwargs.update({
             'count': 1,
@@ -86,21 +93,21 @@ def predict(model_id: str) -> None:
             'nodata': 0
         })
 
-#    with MemoryFile() as memfile:
-#        with memfile.open(**kwargs) as src:
-            # Causes a read of src in the entirety of the box
-            # using memfile works, but for conus it may be too big (is there a "bit" datatype?)
-#            out_ndarray, transform = mask(src, [box(*pds.bounds)], crop=True)
-
+    bounds, height, width, transform = get_output_specs(feature_path, pds)
     kwargs.update({
         'count': 1,
         'dtype': 'uint8',
         'driver': 'GTiff',
-#        'bounds': pds.bounds,
-#        'height': out_ndarray.shape[1],
-#        'width': out_ndarray.shape[2],
-#        'transform': transform,
-        'nodata': 127
+        'bounds': bounds,
+        'height': height,
+        'width': width,
+        'transform': transform,
+        'nodata': 127,
+        'compress': 'LZW',
+        'predictior': 2,
+        'blockxsize': 256,
+        'blockysize': 256,
+        'tiled': 'YES'
     })
 
     with rio.open(output_file, 'w', **kwargs) as dst:
@@ -129,5 +136,7 @@ def predict(model_id: str) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_id', help="Stem of the model file")
+    parser.add_argument('--aoi_file')
+    parser.add_argument('--feature_file', help="Stem of the feature file")
     args = parser.parse_args()
-    predict(args.model_id)
+    predict(args.model_id, args.aoi_file, args.feature_file)

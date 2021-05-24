@@ -93,7 +93,7 @@ def get_zarr_paths(container, fs):
             for zarr in zarrs
         ]
         for year_dir, zarrs, _ in walker
-    ][0])
+    ][2])
 
 
 def get_cog_for_zarr(zarr):
