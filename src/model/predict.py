@@ -1,190 +1,142 @@
 import argparse
 import math
 import os
-import re
 
-import numpy as np
+from affine import Affine
+from azureml.core import Run, Workspace
+import geopandas as gpd
+from numpy import round
 import rasterio as rio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
+from rasterio.mask import mask
+from rasterio.io import MemoryFile
+from shapely.geometry import box
 import torch
+from torch.nn import DataParallel
+from torch.utils.data import DataLoader
 
-from Unet_padded import Unet
+from datasets.MosaicDataset import MosaicDataset as Dataset
+from models.Unet_padded import Unet
 
-def get_output_file(input_file, output_dir, model_root):
-    output_file = re.sub('.tif', f'_pred_{model_root}.tif', input_file)
-    return os.path.join(output_dir, os.path.basename(output_file))
+def get_output_specs(raster_file, dataset):
+    """Used to do this with rasterio mask, but that required
+       reading the whole file"""
+    with rio.open(raster_file) as src:
+        image_xmin, image_ymin, _, _ = src.bounds
+        res = src.res[0]
+        transform = src.transform
 
-def write_output_file(
-        input_rio,
-        output_np,
-        output_file,
-        dst_crs='EPSG:4326'
-        ):
+    area_xmin, area_ymin, area_xmax, area_ymax = dataset.bounds
 
-    # EVERYWHERE else it's height, width
-    transform, width, height = calculate_default_transform(
-        src_crs=input_rio.crs,
-        dst_crs=dst_crs,
-        width=output_np.shape[1],
-        height=output_np.shape[2],
-        left=input_rio.bounds.left,
-        bottom=input_rio.bounds.bottom,
-        right=input_rio.bounds.right,
-        top=input_rio.bounds.top,
-        dst_width=output_np.shape[1],
-        dst_height=output_np.shape[2]
+    xmin = image_xmin + ((area_xmin - image_xmin) // res) * res
+    xmax = xmin + math.ceil((area_xmax - xmin) / res) * res
+    # this _should_ be a multiple of res
+    width = int((xmax - xmin) / res)
+
+    ymin = image_ymin + ((area_ymin - image_ymin) // res) * res
+    ymax = ymin + math.ceil((area_ymax - ymin) / res) * res
+    height = int((ymax - ymin) / res)
+
+    transform = Affine(
+        transform.a,
+        transform.b,
+        xmin,
+        transform.d,
+        transform.e,
+        ymax
+    )
+        
+    return (xmin, ymin, xmax, ymax), height, width, transform
+
+def predict(model_id: str, aoi_file: str, feature_file: str) -> None:
+    run = Run.get_context()
+    offline = run._run_id.startswith("OfflineRun")
+    path = 'data/azml' if offline else 'model/data/azml'
+
+    model_id = 'lumonitor-conus-impervious-2016_1620952711_8aebb74b'
+
+    aoi = gpd.read_file(aoi_file)
+
+    OUTPUT_CHIP_SIZE = 70
+
+#    number = re.sub('^.*_(.*)\..*$', '\\1', j)
+    file_id = os.path.splitext(os.path.basename(aoi_file))[0]
+    output_file = f'outputs/prediction_{file_id}.tif'
+
+    feature_path = os.path.join(path, feature_file)
+    pds = Dataset(
+        feature_path,
+        aoi=aoi,
+        mode="predict"
     )
 
-    kwargs = input_rio.meta.copy()
+    print("num chips", pds.num_chips)
+    loader = DataLoader(pds, batch_size=10, num_workers=6)
 
-    kwargs.update({
-        'crs': dst_crs,
-        'transform': transform,
-        'width': width,
-        'height': height
-    })
-
-    output_rio = rio.open(
-        output_file,
-        mode='w',
-        driver='GTiff',
-        width=width,
-        height=height,
-        count=output_np.shape[0],
-        crs=dst_crs,
-        transform=transform,
-        dtype='float32',
-        nodata=np.NaN,
-        compress='LZW',
-        predictor=3,
-        tiled=True
-    )
-
-    output_np_transformed = np.nan_to_num(np.zeros_like(output_np), copy=False)
-
-    reproject(
-        source=output_np,
-        destination=output_np_transformed,
-        src_transform=input_rio.transform,
-        src_crs=input_rio.crs,
-        dst_transform=transform,
-        dst_crs=dst_crs,
-        dst_nodata=np.NaN,
-        resampling=Resampling.nearest
-    )
-
-    output_rio.write(output_np_transformed.astype('float32'))
-    output_rio.close()
-
-
-def make_predictions(model_file, input_files, output_directory):
     if torch.cuda.is_available():
         dev = "cuda"
     else:
         dev = "cpu"
 
-    N_BANDS = 7
+    model = Unet(7)
+    model_path = os.path.join(path, f'{model_id}.pt')
 
-    model = Unet(N_BANDS)
-
-    CHIP_SIZE = 512
-    test_chip = torch.Tensor(1, N_BANDS, CHIP_SIZE, CHIP_SIZE)
-    total_padding = CHIP_SIZE - 70
-    uncropped_padding = 100
-    OUTPUT_CHIP_SIZE = model.forward(test_chip).shape[2] - total_padding
-    padding = math.ceil((CHIP_SIZE - OUTPUT_CHIP_SIZE) / 2)
-
-    model.load_state_dict(torch.load(model_file))
-    model.float().to(dev)
+    model.load_state_dict(torch.load(model_path, map_location=torch.device(dev)))
+    model.half().to(dev)
     model.eval()
 
-    for image_file in input_files:
-        input_rio = rio.open(image_file)
-        input_np = np.nan_to_num(input_rio.read(), copy=False)
-        n_rows = input_np.shape[1]
-        n_cols = input_np.shape[2]
+    with rio.open(feature_path) as src:
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'count': 1,
+            'dtype': 'uint8',
+            'driver': 'GTiff',
+            'nodata': 0
+        })
 
-        output_np = np.zeros((1, n_rows, n_cols))
-        output_np[:] = np.NaN
+    bounds, height, width, transform = get_output_specs(feature_path, pds)
+    kwargs.update({
+        'count': 1,
+        'dtype': 'uint8',
+        'driver': 'GTiff',
+        'bounds': bounds,
+        'height': height,
+        'width': width,
+        'transform': transform,
+        'nodata': 127,
+        'compress': 'LZW',
+        'predictior': 2,
+        'blockxsize': 256,
+        'blockysize': 256,
+        'tiled': 'YES'
+    })
 
-        uncropped_output_np = output_np.copy()
+    with rio.open(output_file, 'w', **kwargs) as dst:
+        for _, (ds_idxes, data) in enumerate(loader):
+            output = model(data.half().to(dev))
+            data.detach()
+            output_np = round(output.detach().cpu().numpy() * 100).astype('uint8')
 
-        input_t = torch.tensor(input_np)
+            for j, idx_tensor in enumerate(ds_idxes):
+                idx = idx_tensor.detach().cpu().numpy()
+                if idx % 1000 == 0:
+                    print(idx)
+                if len(output_np.shape) > 3:
+                    prediction = output_np[j, 0:1, 221:291, 221:291]
+                else:
+                    prediction = output_np[0:1, 221:291, 221:291]
 
-        n_chip_rows = math.ceil(n_rows / OUTPUT_CHIP_SIZE)
-        n_chip_cols = math.ceil(n_cols / OUTPUT_CHIP_SIZE)
-
-        for row in range(n_chip_rows):
-            for col in range(n_chip_cols):
-                xmin = col * OUTPUT_CHIP_SIZE
-                xmax = xmin + CHIP_SIZE
-                if xmax > n_cols:
-                    xmax = n_cols
-                    xmin = xmax - CHIP_SIZE
-
-                ymin = row * OUTPUT_CHIP_SIZE
-                ymax = ymin + CHIP_SIZE
-                if ymax > n_rows:
-                    ymax = n_rows
-                    ymin = ymax - CHIP_SIZE
-
-                input_data = input_t[:, xmin:xmax, ymin:ymax].unsqueeze(0)
-                output_data = model(input_data.float().to(dev))
-                output_array = output_data.detach().cpu().numpy()
-
-                if row == 0 or row == n_chip_rows - 1 or col == 0 or col == n_chip_cols - 1:
-                    uncropped_output_np[
-                        :,
-                        (xmin + uncropped_padding):(xmax - uncropped_padding),
-                        (ymin + uncropped_padding):(ymax - uncropped_padding)
-                        ] = output_array[
-                            :,
-                            uncropped_padding:(CHIP_SIZE - uncropped_padding),
-                            uncropped_padding:(CHIP_SIZE - uncropped_padding)
-                        ]
-
-                cropped_output_array = output_array[
-                    :, padding:CHIP_SIZE-padding, padding:CHIP_SIZE-padding
-                ]
-                output_np[
-                    :, xmin+padding:xmax-padding, ymin+padding:ymax-padding
-                ] = cropped_output_array
-
-        uncropped_output_np[
-            :,
-            padding:n_cols-padding,
-            padding:n_rows-padding
-        ] = output_np[
-            :,
-            padding:n_cols-padding,
-            padding:n_rows-padding
-        ]
-
-        uncropped_output_np[:, 0:uncropped_padding, :] = np.NaN
-        uncropped_output_np[:, :, 0:uncropped_padding] = np.NaN
-        uncropped_output_np[:, (n_cols - uncropped_padding):n_cols, :] = np.NaN
-        uncropped_output_np[:, :, (n_rows - uncropped_padding):n_rows] = np.NaN
-
-        model_root = os.path.splitext(os.path.basename(model_file))[0]
-        output_file = get_output_file(
-            image_file,
-            output_directory,
-            model_root
-        )
-
-        write_output_file(input_rio, uncropped_output_np, output_file)
-        print(output_file)
+                window = pds.get_cropped_window(
+                    idx,
+                    OUTPUT_CHIP_SIZE,
+                    pds.aoi_transform
+                )
+                dst.write(prediction, window=window)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', '--model_file', required=True)
-    parser.add_argument('-o', '--output_directory', required=True)
-    parser.add_argument('-i', '--input_files', nargs='+', required=True)
-
+    parser.add_argument('--model_id', help="Stem of the model file")
+    parser.add_argument('--aoi_file')
+    parser.add_argument('--feature_file', help="Stem of the feature file")
     args = parser.parse_args()
-    make_predictions(
-        args.model_file,
-        args.input_files,
-        args.output_directory,
-    )
+    predict(args.model_id, args.aoi_file, args.feature_file)

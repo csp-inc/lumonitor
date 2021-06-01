@@ -31,7 +31,9 @@ rgb = np.moveaxis(rgb, 2, 0)
 kwargs.update({
     'count': 4,
     'nodata': 0,
-    'dtype': 'uint8'
+    'dtype': 'uint8',
+    'compress': 'LZW',
+    'predictor': 2
 })
 
 with rio.open(args.output_file, mode='w', **kwargs) as dst:

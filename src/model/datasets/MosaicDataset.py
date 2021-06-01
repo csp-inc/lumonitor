@@ -12,7 +12,7 @@ import rasterio as rio
 from rasterio.windows import bounds, Window
 from rasterio.transform import rowcol
 from shapely.geometry import box, Point, MultiPoint
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_fixed, RetryError
 from torch.utils.data.dataset import Dataset
 
 
@@ -99,27 +99,37 @@ class MosaicDataset(Dataset):
         return None
 
     def _get_indices(self):
+        # returns (pd.Series, pd.Series)
         if self.mode == "train":
             upper_left_points = self._get_random_points()
+#            GeoDataFrame(geometry=upper_left_points, crs=self.crs).to_file('test_pts.shp')
         else:
             upper_left_points = self._get_grid_points()
 
         return upper_left_points.x, upper_left_points.y
 
-    def _get_random_points(self) -> GeoSeries:
+    def _replace_index(self, idx: int):
+        print(f'replacing point at index {idx}')
+        point = self._get_random_points(1)
+        self.chip_xs[idx], self.chip_ys[idx] = point.x[0], point.y[0]
+
+    def _get_random_points(self, n: int = None) -> GeoSeries:
+        if n is None:
+            n = self.num_chips
+
         x_min, y_min, x_max, y_max = self.bounds
 
         upper_left_points = GeoSeries([])
         while len(upper_left_points) < self.num_chips:
-            x = np.random.uniform(x_min, x_max, self.num_chips * 2)
-            y = np.random.uniform(y_min, y_max, self.num_chips * 2)
+            x = np.random.uniform(x_min, x_max, n * 2)
+            y = np.random.uniform(y_min, y_max, n * 2)
             new_points = self._points_in_aoi(points(x, y))
             upper_left_points = upper_left_points.append(
                 new_points,
                 ignore_index=True
             )
 
-        return upper_left_points[0:self.num_chips]
+        return upper_left_points[0:n]
 
     def _get_grid_points(self) -> GeoSeries:
         x_min, y_min, x_max, y_max = self.bounds
@@ -196,6 +206,7 @@ class MosaicDataset(Dataset):
     def _read_chip(self, ds, kwargs):
         return ds.read(**kwargs)
 
+    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
     def _get_img_chip(self, window: Window):
         with rio.open(self.feature_file) as img_ds:
             img_chip = self._read_chip(
@@ -217,7 +228,7 @@ class MosaicDataset(Dataset):
                 {'indexes': self.label_band, 'window': label_window}
             )
 
-        # Don't know where these -1000 are coming from, but
+        # Don't know where these -1000s are coming from, but
         # they are there on read
         masked = (label_chip_raw > 100) | (label_chip_raw == -1000)
         return masked_array(
@@ -227,9 +238,8 @@ class MosaicDataset(Dataset):
         # Replace nodatas with 0,
         # then divide by 100 for real values
 
-    def __getitem__(self, idx: int):
+    def _get_chips_for_idx(self, idx: int):
         window = self._get_window(idx)
-
         img_chip = self._get_img_chip(window)
 
         if self.mode == 'train':
@@ -238,5 +248,23 @@ class MosaicDataset(Dataset):
 
         return img_chip
 
+    def __getitem__(self, idx: int):
+        try:
+            item = self._get_chips_for_idx(idx)
+        except RetryError as e:
+            if self.mode == "train":
+                self._replace_index(idx)
+                item = self._get_chips_for_idx(idx)
+            else:
+                raise e
+
+        return (idx, item)
+
     def __len__(self) -> int:
         return self.num_chips
+
+    def subset(self, start_idx: int, end_idx: int) -> None:
+        self.chip_xs = self.chip_xs[start_idx:end_idx].reset_index(drop=True)
+        self.chip_ys = self.chip_ys[start_idx:end_idx].reset_index(drop=True)
+        self.num_chips = len(self.chip_xs)
+

@@ -12,12 +12,12 @@ colors <- c('#010101', '#ff0101', '#ffbb01', '#ffff01')
 
 n_colors <- 10
 ramp <- colorRampPalette(colors)(n_colors)
-breaks <- seq(0, 1, length.out=n_colors + 1)
+breaks <- seq(0, 100, length.out=n_colors + 1)
 
 input_raster <- raster(input_file) 
 output_raster <- RGB(input_raster, col=ramp, breaks=breaks, colNA='black')
 
-options = c("COMPRESS=LZW", "BIGTIFF=YES", "TILED=TRUE", "BLOCKXSIZE=256",      
+options = c("COMPRESS=LZW", "PREDICTOR=2", "BIGTIFF=YES", "TILED=TRUE", "BLOCKXSIZE=256",      
             "BLOCKYSIZE=256") 
 
 writeRaster(

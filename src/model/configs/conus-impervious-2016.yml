@@ -1,5 +1,8 @@
 epochs: 100
-training_samples: 10000
-test_samples: 2000
-learning_rate: 0.01
+training_samples: 2500
+test_samples: 1000
+learning_rate: 0.02
 learning_schedule_gamma: 0.99
+seed: 1337
+training_aoi_file: 'urban_training_areas.gpkg'
+test_aoi_file: 'conus.geojson'
