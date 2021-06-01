@@ -18,8 +18,7 @@ if __name__ == "__main__":
 
     config = ScriptRunConfig(
         source_directory='./src',
-#        script='model/train.py',
-        script='model/predict.py',
+        script='model/train.py',
         compute_target='gpu-cluster',
         distributed_job_config=distr_config,
         arguments=[
