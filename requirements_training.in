@@ -1,0 +1,11 @@
+affine
+azureml-core
+geopandas
+numpy
+matplotlib
+Pillow
+pygeos --no-binary pygeos
+rasterio
+shapely --no-binary shapely
+torch
+pyyaml

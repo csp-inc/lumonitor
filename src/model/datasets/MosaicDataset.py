@@ -1,5 +1,4 @@
 from math import ceil, floor, sqrt
-import os
 
 from affine import Affine
 import geopandas as gpd
@@ -11,7 +10,7 @@ import pygeos
 import rasterio as rio
 from rasterio.windows import bounds, Window
 from rasterio.transform import rowcol
-from shapely.geometry import box, Point, MultiPoint
+from shapely.geometry import box, Point
 from tenacity import retry, stop_after_attempt, wait_fixed, RetryError
 from torch.utils.data.dataset import Dataset
 
@@ -102,7 +101,6 @@ class MosaicDataset(Dataset):
         # returns (pd.Series, pd.Series)
         if self.mode == "train":
             upper_left_points = self._get_random_points()
-#            GeoDataFrame(geometry=upper_left_points, crs=self.crs).to_file('test_pts.shp')
         else:
             upper_left_points = self._get_grid_points()
 

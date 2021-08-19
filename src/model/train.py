@@ -1,10 +1,8 @@
 import argparse
-import math
 import os
 import random
-import re
-import yaml
 from dataclasses import dataclass
+import yaml
 
 from azureml.core import Run
 import geopandas as gpd
@@ -26,6 +24,7 @@ from models.Unet_padded import Unet
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
+
 
 def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
@@ -171,7 +170,7 @@ class Trainer():
             return gpd.read_file(aoi_file)
         return None
 
-    def _get_training_raster_specs(self) -> int:
+    def _get_training_raster_specs(self) -> tuple:
         with rio.open(self.training_file) as src:
             num_bands = src.count
             res = src.res[0]

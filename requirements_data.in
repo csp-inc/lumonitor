@@ -1,0 +1,13 @@
+bokeh
+dask
+dask[distributed]
+earthengine-api
+gcsfs
+geocube
+GDAL==3.2.1
+fsspec
+# This is only needed for copying zarrs to cogs. The fork allows writing to
+# blob storage via rioxarray.
+git+git://github.com/blindjesse/rasterio@az_error#egg=rasterio
+rioxarray
+xarray

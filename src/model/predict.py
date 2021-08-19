@@ -104,7 +104,7 @@ def predict(model_id: str, aoi_file: str, feature_file: str) -> None:
         'transform': transform,
         'nodata': 127,
         'compress': 'LZW',
-        'predictior': 2,
+        'predictor': 2,
         'blockxsize': 256,
         'blockysize': 256,
         'tiled': 'YES'

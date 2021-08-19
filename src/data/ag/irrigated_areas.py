@@ -8,7 +8,7 @@ from osgeo import gdal, gdalconst
 import rioxarray
 import xarray
 
-def irrigated_areas(output_file):
+def irrigated_areas(output_proj, output_file):
     ee.Initialize()
 
     aoi = ee.FeatureCollection("projects/GEE_CSP/thirty-by-thirty/aoi_conus")
@@ -30,6 +30,7 @@ def irrigated_areas(output_file):
         'fileNamePrefix': output_prefix,
         'region': aoi.geometry(),
         'scale': lanid.projection().nominalScale(),
+        'crs': output_proj,
         'maxPixels': 1e11,
         'fileDimensions': 131072
     })
@@ -64,4 +65,5 @@ if __name__ == '__main__':
     parser.add_argument('output_file')
     args = parser.parse_args()
 
-    irrigated_areas(output_file=args.output_file)
+    output_proj = 'PROJCS["Albers Conical Equal Area",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101004,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4269"]],PROJECTION["Albers_Conic_Equal_Area"],PARAMETER["latitude_of_center",23],PARAMETER["longitude_of_center",-96],PARAMETER["standard_parallel_1",29.5],PARAMETER["standard_parallel_2",45.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]'
+    irrigated_areas(output_proj=output_proj, output_file=args.output_file)

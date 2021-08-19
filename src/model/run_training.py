@@ -1,4 +1,3 @@
-import argparse
 import os
 
 from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
