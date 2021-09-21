@@ -30,12 +30,11 @@ def irrigated_areas(output_proj, output_file):
         'fileNamePrefix': output_prefix,
         'region': aoi.geometry(),
         'scale': lanid.projection().nominalScale(),
-        'crs': output_proj,
         'maxPixels': 1e11,
         'fileDimensions': 131072
     })
 
-    task.start()
+    # task.start()
 
     while task.active():
         time.sleep(50)
@@ -51,11 +50,12 @@ def irrigated_areas(output_proj, output_file):
     gdal.BuildVRT(vrt_tempfile, pieces)
 
     ds = gdal.Open(vrt_tempfile)
-    ds = gdal.Translate(
+    ds = gdal.Warp(
         output_file,
         ds,
         outputType=gdalconst.GDT_Byte,
-        noData=no_data,
+        dstSRS=output_proj,
+        dstNodata=no_data,
         creationOptions=['COMPRESS=LZW', 'PREDICTOR=2']
     )
     ds = None

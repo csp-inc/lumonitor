@@ -9,11 +9,7 @@ from dask.distributed import Client, Lock
 from geocube.api.core import make_geocube
 
 
-def zonal_stats(
-        df: gpd.GeoDataFrame,
-        zone_col: str,
-        like
-):
+def zonal_stats(df: gpd.GeoDataFrame, zone_col: str, value_da: str, like: xr.Dataset):
 
     def zonal_stats_block(block):
         zones = make_geocube(
@@ -23,11 +19,12 @@ def zonal_stats(
             fill=np.nan,
             rasterize_function=partial(geocube.rasterize.rasterize_image, all_touched=True)
         ).assign_coords(block.coords)
-        zones['urban_impact'] = block.urban_impact
+        zones[value_da] = block[value_da]
+#        zones['urban_impact'] = block.urban_impact
         # groupby complains if zone_col is all nan within the block
         if np.isnan(zones.id).all().item(0):
             return zones
-        return zones.groupby(zone_col)
+        return zones
 
     return like.map_blocks(
         zonal_stats_block,
@@ -39,10 +36,8 @@ if __name__ == '__main__':
     client = Client()
     print(client.dashboard_link)
 
-    states = gpd.read_file('ag1.gpkg')#'data/irrigation_rate.gpkg')
+    states = gpd.read_file('ag1.gpkg')
 
-    # Need to format this as a dataset so map_blocks won't complain
-    # when it comes back
     values_da = rx.open_rasterio(
         'ag1.tif',
 #        'data/conus_2020_prediction_4326.tif',
@@ -52,7 +47,8 @@ if __name__ == '__main__':
     values = values_da.to_dataset(**{'name': 'id'})
     values['urban_impact'] = values_da
     
-    stats = zonal_stats(states, 'id', values).mean()
-    print(stats)
+    # This doesn't work because groupby brings it all into memory (see various
+    # gh issues, etc about this
+    stats = zonal_stats(states, 'id', 'urban_impact', values).groupby('id').mean()
 
     stats.to_dataframe().to_csv('test.csv')
