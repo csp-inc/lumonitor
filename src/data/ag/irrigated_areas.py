@@ -18,7 +18,6 @@ def irrigated_areas(output_proj, output_file):
     lanid = (
         ee.Image("users/xyhisu/irrigationMapping/results/LANID12")
         .byte()
-        .unmask(0)
         .updateMask(mask)
         .unmask(no_data)
     )
@@ -34,7 +33,7 @@ def irrigated_areas(output_proj, output_file):
         'fileDimensions': 131072
     })
 
-    # task.start()
+    task.start()
 
     while task.active():
         time.sleep(50)

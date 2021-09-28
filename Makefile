@@ -1,9 +1,22 @@
 SHELL=/usr/bin/env bash
 VPATH=data/:src/data/ag/
 
-data/irrigation_volume.tif: src/data/ag/crop_impacts.py state_irrigation_volume.tif irrigated_areas.tif
-data/state_irrigation_volume.tif: irrigation_rate.gpkg cropland.tif
-	python3 src/utils/rasterize_geocube.py --vector_file=$< --measurement_field=acre_feet_per_acre_irrigated --template_raster=data/cropland.tif --output_file=$@
+data/net_water_2020.tif: daymet_precip_2020.tif ssebop_2020.tif
+	gdal_calc.py --calc="A-B" --outfile=$@ -A data/daymet_precip_2020.tif -B data/ssebop_2020.tif --co=COMPRESS=LZW --co=PREDICTOR=3
+
+data/daymet_precip_2020.tif:
+	python src/data/ag/daymet.py
+
+data/ssebop_2020.tif:
+	source src/data/ag/ssebop.sh
+
+data/irrigation_volume.tif: irrigated_areas.tif irrigation_rate.gpkg
+	gdal_translate -ot Float32 -co COMPRESS=LZW -co PREDICTOR=3 $< $@
+	gdal_rasterize -a acre_feet_per_pixel data/irrigation_rate.gpkg temp.tif
+	# Likely another way to do this I haven't discovered, just need to essentially
+	# mask temp.tif to irrigated areas
+	gdal_calc.py --calc="A*B" --outfile=$@ -A $< -B temp.tif --co=COMPRESS=LZW --co=PREDICTOR=3
+
 data/irrigation_rate.gpkg: src/data/ag/irrigation_rate.R
 data/irrigated_areas.tif: src/data/ag/irrigated_areas.py
 

@@ -21,7 +21,9 @@ attrs==21.2.0
     #   jsonschema
     #   rasterio
 bokeh==2.3.3
-    # via -r requirements_data.in
+    # via
+    #   -r requirements_data.in
+    #   dask
 cachetools==4.2.2
     # via
     #   datacube
@@ -63,19 +65,29 @@ cloudpickle==1.6.0
     #   dask
     #   datacube
     #   distributed
-dask==2021.07.0
+colorcet==2.0.6
+    # via datashader
+dask[array,complete,distributed]==2021.07.0
     # via
     #   -r requirements_data.in
     #   datacube
+    #   datashader
     #   distributed
+    #   spatialpandas
+    #   xarray-spatial
 datacube==1.8.3
     # via geocube
+datashader==0.13.0
+    # via xarray-spatial
+datashape==0.5.2
+    # via datashader
 decorator==5.0.9
     # via gcsfs
 distributed==2021.07.0
     # via
     #   dask
     #   datacube
+    #   xarray-spatial
 earthengine-api==0.1.272
     # via -r requirements_data.in
 fiona==1.8.20
@@ -85,6 +97,7 @@ fsspec==2021.06.1
     #   -r requirements_data.in
     #   dask
     #   gcsfs
+    #   spatialpandas
 future==0.18.2
     # via earthengine-api
 gcsfs==2021.6.1
@@ -149,6 +162,8 @@ jsonschema==3.2.0
     # via datacube
 lark-parser==0.11.3
     # via datacube
+llvmlite==0.37.0
+    # via numba
 locket==0.2.1
     # via partd
 markupsafe==2.0.1
@@ -159,22 +174,35 @@ multidict==5.1.0
     # via
     #   aiohttp
     #   yarl
+multipledispatch==0.6.0
+    # via datashape
 munch==2.5.0
     # via fiona
 netcdf4==1.5.7
     # via datacube
-numpy==1.21.0
+numba==0.54.0
+    # via
+    #   datashader
+    #   spatialpandas
+    #   xarray-spatial
+numpy==1.20.3
     # via
     #   bokeh
     #   cftime
     #   dask
     #   datacube
+    #   datashader
+    #   datashape
     #   netcdf4
+    #   numba
     #   pandas
+    #   pyarrow
     #   rasterio
     #   scipy
     #   snuggs
+    #   spatialpandas
     #   xarray
+    #   xarray-spatial
 oauthlib==3.1.1
     # via requests-oauthlib
 packaging==21.0
@@ -183,12 +211,26 @@ packaging==21.0
     #   google-api-core
 pandas==1.3.0
     # via
+    #   dask
+    #   datashader
     #   geopandas
+    #   spatialpandas
     #   xarray
+    #   xarray-spatial
+param==1.11.1
+    # via
+    #   colorcet
+    #   datashader
+    #   pyct
+    #   spatialpandas
+    #   xarray-spatial
 partd==1.2.0
     # via dask
 pillow==8.3.1
-    # via bokeh
+    # via
+    #   bokeh
+    #   datashader
+    #   xarray-spatial
 protobuf==3.17.3
     # via
     #   google-api-core
@@ -197,6 +239,8 @@ psutil==5.8.0
     # via distributed
 psycopg2==2.9.1
     # via datacube
+pyarrow==5.0.0
+    # via spatialpandas
 pyasn1==0.4.8
     # via
     #   pyasn1-modules
@@ -205,6 +249,11 @@ pyasn1-modules==0.2.8
     # via google-auth
 pycparser==2.20
     # via cffi
+pyct==0.4.6
+    # via
+    #   colorcet
+    #   datashader
+    #   xarray-spatial
 pyparsing==2.4.7
     # via
     #   httplib2
@@ -222,7 +271,10 @@ python-dateutil==2.8.1
     # via
     #   bokeh
     #   datacube
+    #   datashape
     #   pandas
+python-snappy==0.6.0
+    # via spatialpandas
 pytz==2021.1
     # via
     #   google-api-core
@@ -245,8 +297,11 @@ requests==2.25.1
     #   google-api-core
     #   google-cloud-storage
     #   requests-oauthlib
+    #   xarray-spatial
 requests-oauthlib==1.3.0
     # via google-auth-oauthlib
+retrying==1.3.3
+    # via spatialpandas
 rioxarray==0.4.3
     # via
     #   -r requirements_data.in
@@ -254,7 +309,10 @@ rioxarray==0.4.3
 rsa==4.7.2
     # via google-auth
 scipy==1.7.0
-    # via rioxarray
+    # via
+    #   datashader
+    #   rioxarray
+    #   xarray-spatial
 shapely==1.7.1
     # via
     #   datacube
@@ -271,13 +329,17 @@ six==1.16.0
     #   google-resumable-media
     #   httplib2shim
     #   jsonschema
+    #   multipledispatch
     #   munch
     #   protobuf
     #   python-dateutil
+    #   retrying
 snuggs==1.4.7
     # via rasterio
 sortedcontainers==2.4.0
     # via distributed
+spatialpandas==0.4.3
+    # via xarray-spatial
 sqlalchemy==1.4.21
     # via datacube
 tblib==1.7.0
@@ -306,8 +368,12 @@ xarray==0.18.2
     # via
     #   -r requirements_data.in
     #   datacube
+    #   datashader
     #   geocube
     #   rioxarray
+    #   xarray-spatial
+xarray-spatial==0.2.7
+    # via -r requirements_data.in
 yarl==1.6.3
     # via aiohttp
 zict==2.0.0

@@ -1,4 +1,5 @@
 library(dplyr)
+library(exactextractr)
 library(raster)
 library(sf)
 library(tidyr)
@@ -18,22 +19,16 @@ state_volume <- nass_data(
   short_desc="AG LAND, IRRIGATED - WATER APPLIED, MEASURED IN ACRE FEET",
   domain_desc="TOTAL") %>%
 mutate(acre_feet_applied = as.numeric(gsub(',', '', Value))) %>%
-select("STATEFP"=state_fips_code, acre_feet_applied)
+dplyr::select("STATEFP"=state_fips_code, acre_feet_applied)
 
 ac_per_sqm <- 1 / 4046.86
 
-state_volume_sf <- nass_data(
-  source_desc="CENSUS",
-  short_desc="AG LAND, IRRIGATED - ACRES",
-  agg_level_desc="STATE",
-  year="2017",
-  domain_desc="TOTAL") %>%
-select("STATEFP"=state_fips_code, acres_irrigated) %>%
-full_join(state_volume) %>%
+state_volume %>%
 right_join(state_sf) %>%
+dplyr::select(acre_feet_applied, geometry) %>%
 st_as_sf %>%
 mutate(
-  irrigated_area_ac=exact_extract(irrigated_areas, state_volume_sf, 'sum') * prod(res(irrigated_areas)) * ac_per_sqm
-  acre_feet_per_acre=acre_feet_applied
+  state_irrigated_area_pixels=exact_extract(irrigated_areas, ., 'sum'),
+  acre_feet_per_pixel=acre_feet_applied/ state_irrigated_area_pixels
   ) %>%
 write_sf(output_file)

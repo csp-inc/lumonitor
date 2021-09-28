@@ -1,3 +1,4 @@
+azfs
 bokeh
 dask
 dask[distributed]
@@ -11,3 +12,4 @@ fsspec
 git+git://github.com/blindjesse/rasterio@az_error#egg=rasterio
 rioxarray
 xarray
+xarray-spatial
