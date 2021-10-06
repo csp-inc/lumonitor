@@ -2,9 +2,8 @@ SHELL=/usr/bin/env bash
 VPATH=data/:src/data/ag/
 
 data/net_water_2020.tif: daymet_precip_2020.tif ssebop_2020.tif
-	gdal_calc.py --calc="A-B" --outfile=$@ -A data/daymet_precip_2020.tif -B data/ssebop_2020.tif --co=COMPRESS=LZW --co=PREDICTOR=3
 
-data/daymet_precip_2020.tif:
+data/daymet_precip_2020.tif: irrigated_areas.tif
 	python src/data/ag/daymet.py
 
 data/ssebop_2020.tif:
