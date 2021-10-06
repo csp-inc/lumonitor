@@ -2,7 +2,7 @@ library(magrittr)
 library(terra)
 
 irrigated_areas <- rast("data/irrigated_areas.tif")
-terraOptions(datatype = "FLT2S", memfrac = 0.9, verbose = TRUE)
+terraOptions(datatype = "FLT2S", memfrac = 0.9)
 
 for (year in c("2016", "2020")) {
   daymet <- rast(paste0("data/daymet_precip_", year, ".tif"))
