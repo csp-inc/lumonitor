@@ -21,13 +21,13 @@ def export_hm(output_proj: str, output_file: str) -> None:
         region=aoi.geometry(),
         scale=image.projection().nominalScale(),
         maxPixels=1e11,
-        fileDimensions=131072,
     )
 
     # task.start()
 
     while task.active():
         time.sleep(50)
+        print("sleepy sleepy")
 
     fs = gcsfs.GCSFileSystem()
     pieces = [
