@@ -30,23 +30,15 @@ def export_hm(output_proj: str, output_file: str) -> None:
         print("sleepy sleepy")
 
     fs = gcsfs.GCSFileSystem()
-    pieces = [
-        f"/vsigs/{f}"
-        for f in fs.ls("lumonitor")
-        if os.path.basename(f).startswith(output_prefix)
-    ]
-
-    vrt = f"/vsimem/{output_prefix}.vrt"
-    gdal.BuildVRT(vrt, pieces)
-
-    ds = gdal.Open(vrt)
-    ds = gdal.Warp(
-        output_file,
-        ds,
-        dstSRS=output_proj,
-        creationOptions=["COMPRESS=LZW", "PREDICTOR=3", "BIGTIFF=YES"],
-    )
-    ds = None
+    for f in fs.ls("lumonitor"):
+        if os.path.basename(f).startswith(output_prefix):
+            print(f)
+            gdal.Warp(
+                f"/vsiaz/hls/{os.path.basename(f)}",
+                gdal.Open(f"/vsigs/{f}"),
+                dstSRS=output_proj,
+                creationOptions=["COMPRESS=LZW", "PREDICTOR=3", "BIGTIFF=YES"],
+            )
 
 
 if __name__ == "__main__":
