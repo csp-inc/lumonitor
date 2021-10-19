@@ -3,47 +3,51 @@ import os
 import time
 
 import azfs
-#import ee
+import ee
 import gcsfs
 import os
 from tenacity import retry, stop_after_attempt, wait_fixed
 from osgeo import gdal, gdalconst
 
-#ee.Initialize()
+ee.Initialize()
 os.environ['CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE'] = 'YES'
 
 @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
 def convert_file(f:str, output_proj:str) -> None:
     gdal.Warp(
-        f"/vsiaz/hls/{os.path.basename(f)}",
+        f"/vsiaz/hls/hm/{os.path.basename(f)}",
         gdal.Open(f"/vsigs/{f}"),
         dstSRS=output_proj,
-        creationOptions=["COMPRESS=LZW", "PREDICTOR=3"],
+        format="COG",
+        outputType=gdalconst.GDT_Int16,
+        xRes=30,
+        yRes=30,
+        creationOptions=["COMPRESS=LZW", "PREDICTOR=2", "BLOCKSIZE=256"],
     )
 
 
 def export_hm(output_proj: str) -> None:
-#    image = ee.Image("projects/GEE_CSP/HM/HM_ee_2017_v014_500_30")
+    image = ee.Image("projects/GEE_CSP/HM/HM_ee_2017_v014_500_30").multiply(10000).int16()
     output_prefix = "HM_ee_2017_v014_500_30"
-#    aoi = ee.FeatureCollection("projects/GEE_CSP/thirty-by-thirty/aoi_conus")
-#
-#    task = ee.batch.Export.image.toCloudStorage(
-#        image=image,
-#        bucket="lumonitor",
-#        fileNamePrefix=output_prefix,
-#        region=aoi.geometry(),
-#        scale=image.projection().nominalScale(),
-#        maxPixels=1e11,
-#    )
-#
-#    # task.start()
-#
-#    while task.active():
-#        time.sleep(50)
-#        print("sleepy sleepy")
+    aoi = ee.FeatureCollection("projects/GEE_CSP/thirty-by-thirty/aoi_conus")
+
+    task = ee.batch.Export.image.toCloudStorage(
+        image=image,
+        bucket="lumonitor",
+        fileNamePrefix=output_prefix,
+        region=aoi.geometry(),
+        scale=image.projection().nominalScale(),
+        maxPixels=1e11,
+    )
+
+    task.start()
+
+    while task.active():
+        time.sleep(50)
+        print("sleepy sleepy")
 
     fs = gcsfs.GCSFileSystem(token=os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
-    azc = azfs.AzFileClient(credential="3WPere+/BOHlg4btPB29F0wi8sJQACOchgrCgHrdlahtvj747h0aQ2T3HeALhfIZkfhCjVQDbPsQg+K4xVngsQ==")
+    azc = azfs.AzFileClient(credential="")
     target_files = azc.ls("https://lumonitoreastus2.blob.core.windows.net/hls")
     for f in fs.ls("lumonitor"):
         if os.path.basename(f).startswith(output_prefix):
