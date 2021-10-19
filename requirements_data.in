@@ -11,5 +11,6 @@ fsspec
 # blob storage via rioxarray.
 git+git://github.com/blindjesse/rasterio@az_error#egg=rasterio
 rioxarray
+tenacity
 xarray
 xarray-spatial
