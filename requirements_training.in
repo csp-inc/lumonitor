@@ -7,5 +7,6 @@ Pillow
 pygeos --no-binary pygeos
 rasterio
 shapely --no-binary shapely
+tenacity
 torch
 pyyaml

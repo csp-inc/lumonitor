@@ -1,12 +1,14 @@
 import argparse
+from dataclasses import dataclass
 import os
 import random
-from dataclasses import dataclass
+from typing import Callable
 import yaml
 
 from azureml.core import Run
 import geopandas as gpd
 import numpy as np
+from numpy.ma import masked_array
 from matplotlib.colors import LinearSegmentedColormap
 from pandas import DataFrame
 from PIL import Image
@@ -36,17 +38,40 @@ def set_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+def nlcd_chipper(chip_raw: np.ndarray) -> np.ndarray:
+    # Don't know where these -1000s are coming from, but
+    # they are there on read
+    masked = (chip_raw > 100) | (chip_raw == -1000)
+    # Replace nodatas with 0,
+    # then divide by 100 for real values
+    return (
+        masked_array(
+            chip_raw,
+            mask=masked,
+        ).filled(0)
+        / 100.0
+    )
+
+
+def hm_chipper(chip_raw: np.ndarray) -> np.ndarray:
+    masked = chip_raw == -32768
+    return masked_array(chip_raw, mask=masked).filled(0) / 10000.0
+
+
 @dataclass
-class Trainer():
+class Trainer:
     epochs: int
     training_samples: int
     test_samples: int
+    label_file: str = "/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif"
+    training_file: str = "/vsiaz/hls/cog/conus_hls_median_2016.vrt"
     learning_rate: float = 0.01
     learning_schedule_gamma: float = 0.975
     momentum: float = 0.8
     chip_size: int = 512
-    training_aoi_file: str = 'conus.geojson'
-    test_aoi_file: str = 'conus.geojson'
+    chipper: Callable = nlcd_chipper
+    training_aoi_file: str = "conus.geojson"
+    test_aoi_file: str = "conus.geojson"
     batch_size: int = 8
     num_workers: int = 6
     seed: int = 1337
@@ -54,61 +79,63 @@ class Trainer():
     def __post_init__(self):
         self.run = Run.get_context()
         offline = self.run._run_id.startswith("OfflineRun")
-        path = 'data/azml' if offline else 'model/data/azml'
-
-        self.training_file = os.path.join(path, 'conus_hls_median_2016.vrt')
-        self.label_file = '/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif'
+        path = "data/azml" if offline else "model/data/azml"
         self.training_aoi = self._load_aoi(path, self.training_aoi_file)
         self.test_aoi = self._load_aoi(path, self.test_aoi_file)
-        self.num_training_bands, self.res = self._get_training_raster_specs()
-        self.dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.num_training_bands, self.res = self._get_raster_specs(self.training_file)
+        self.num_label_bands, _ = self._get_raster_specs(self.label_file)
+        self.dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         set_seed(self.seed)
 
-        print('Using device:', self.dev)
-        self.net = Unet(self.num_training_bands).float().to(self.dev)
+        print("Using device:", self.dev)
+        self.net = (
+            Unet(self.num_training_bands, self.num_label_bands).float().to(self.dev)
+        )
         self.output_chip_size = self._get_output_chip_size()
 
         self._loss = None
         self._test_loss = None
         self._lr = None
         self._epoch = None
-        self.log_df = DataFrame(columns=['epoch', 'loss', 'test_loss', 'lr'])
+        self.log_df = DataFrame(columns=["epoch", "loss", "test_loss", "lr"])
 
-        swatch_file = os.path.join(path, 'swatches.gpkg')
+        swatch_file = os.path.join(path, "swatches.gpkg")
         self.swatches = gpd.read_file(swatch_file)
+        label_bands = (
+            range(1, self.num_label_bands + 1) if self.num_label_bands > 1 else 1
+        )
 
         self.dataset_kwargs = {
-            'feature_file': self.training_file,
-            'feature_chip_size': self.chip_size,
-            'output_chip_size': self.output_chip_size,
-            'label_file': self.label_file
+            "feature_file": self.training_file,
+            "feature_chip_size": self.chip_size,
+            "output_chip_size": self.output_chip_size,
+            "label_file": self.label_file,
+            "label_bands": label_bands,
+            "chip_from_raw_chip": self.chipper,
         }
         self.dataloader_kwargs = {
-            'num_workers': self.num_workers,
-            'batch_size': self.batch_size,
-            'pin_memory': True,
-            'worker_init_fn': worker_init_fn
+            "num_workers": self.num_workers,
+            "batch_size": self.batch_size,
+            "pin_memory": True,
+            "worker_init_fn": worker_init_fn,
         }
 
         self.test_loader = DataLoader(
             Dataset(
                 num_training_chips=self.test_samples,
                 aoi=self.test_aoi,
-                **self.dataset_kwargs
+                **self.dataset_kwargs,
             ),
             shuffle=False,
-            **self.dataloader_kwargs
+            **self.dataloader_kwargs,
         )
 
         self.criterion = nn.MSELoss()
         self.optimizer = optim.SGD(
-            self.net.parameters(),
-            lr=self.learning_rate,
-            momentum=self.momentum
+            self.net.parameters(), lr=self.learning_rate, momentum=self.momentum
         )
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
-            self.optimizer,
-            lr_lambda=self._get_lr_lambda
+            self.optimizer, lr_lambda=self._get_lr_lambda
         )
 
     @property
@@ -148,18 +175,15 @@ class Trainer():
     @lr.setter
     def lr(self, value):
         self._lr = value
-        print('LR: %.4f' % value)
+        print("LR: %.4f" % value)
         self.run.log("lr", value)
 
     def _write_log(self) -> None:
         row = dict(
-            epoch=self.epoch,
-            loss=self.loss,
-            test_loss=self.test_loss,
-            lr=self.lr
+            epoch=self.epoch, loss=self.loss, test_loss=self.test_loss, lr=self.lr
         )
         self.log_df = self.log_df.append(row, ignore_index=True)
-        self.log_df.to_csv('./outputs/log.csv', index=False)
+        self.log_df.to_csv("./outputs/log.csv", index=False)
 
     def _get_lr_lambda(self, epoch: int) -> float:
         return self.learning_schedule_gamma ** epoch
@@ -170,8 +194,8 @@ class Trainer():
             return gpd.read_file(aoi_file)
         return None
 
-    def _get_training_raster_specs(self) -> tuple:
-        with rio.open(self.training_file) as src:
+    def _get_raster_specs(self, raster_file: str) -> tuple:
+        with rio.open(raster_file) as src:
             num_bands = src.count
             res = src.res[0]
 
@@ -180,10 +204,7 @@ class Trainer():
     def _get_output_chip_size(self) -> int:
         # Not to be confused with "good" area
         test_chip = torch.Tensor(
-            1,
-            self.num_training_bands,
-            self.chip_size,
-            self.chip_size
+            1, self.num_training_bands, self.chip_size, self.chip_size
         ).to(self.dev)
         return self.net.forward(test_chip).shape[2]
 
@@ -194,17 +215,11 @@ class Trainer():
             aoi = self.training_aoi
 
         return Dataset(
-            num_training_chips=self.training_samples,
-            aoi=aoi,
-            **self.dataset_kwargs
+            num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
         )
 
     def _get_loader(self, ds: Dataset) -> DataLoader:
-        return DataLoader(
-            ds,
-            shuffle=True,
-            **self.dataloader_kwargs
-        )
+        return DataLoader(ds, shuffle=True, **self.dataloader_kwargs)
 
     def train(self):
         for self.epoch in range(self.epochs):
@@ -225,7 +240,7 @@ class Trainer():
             self.lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step()
 
-            torch.save(self.net.state_dict(), './outputs/model.pt')
+            torch.save(self.net.state_dict(), "./outputs/model.pt")
             self._write_log()
 
     def _train_step(self, loader: DataLoader) -> float:
@@ -268,19 +283,19 @@ class Trainer():
 
     def _write_swatches(self) -> None:
         ramp = [
-            (0, '#010101'),
-            (1/3., '#ff0101'),
-            (2/3., '#ffbb01'),
-            (1, '#ffff01')
+            (0, "#010101"),
+            (1 / 3.0, "#ff0101"),
+            (2 / 3.0, "#ffbb01"),
+            (1, "#ffff01"),
         ]
         cm = LinearSegmentedColormap.from_list("urban", ramp)
         swatch_dataloader_kwargs = self.dataloader_kwargs.copy()
-        swatch_dataloader_kwargs.update({'batch_size': 1})
+        swatch_dataloader_kwargs.update({"batch_size": 1})
         self.net.eval()
         for i, _ in self.swatches.iterrows():
             swatch = self.swatches.loc[[i]]
             swatch_kwargs = self.dataset_kwargs.copy()
-            swatch_kwargs.update({'aoi': swatch, 'mode': 'predict'})
+            swatch_kwargs.update({"aoi": swatch, "mode": "predict"})
             ds = Dataset(**swatch_kwargs)
             print(ds.num_chips)
             # This may need to be different for prediction, not sure (prob. not)
@@ -288,19 +303,21 @@ class Trainer():
             with rio.open(self.training_file) as src:
                 kwargs = src.meta.copy()
                 out_array, transform = mask(src, [box(*ds.bounds)], crop=True)
-            kwargs.update({
-                'count': 1,
-                'dtype': 'float32',
-                'driver': 'GTiff',
-                'bounds': ds.bounds,
-                'height': out_array.shape[1],
-                'width': out_array.shape[2],
-                'transform': transform
-            })
+            kwargs.update(
+                {
+                    "count": 1,
+                    "dtype": "float32",
+                    "driver": "GTiff",
+                    "bounds": ds.bounds,
+                    "height": out_array.shape[1],
+                    "width": out_array.shape[2],
+                    "transform": transform,
+                }
+            )
 
-            output_file = f'outputs/swatch_{i}_{self.epoch}.tif'
+            output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
             swatch_np = np.empty((out_array.shape[1], out_array.shape[2]))
-            with rio.open(output_file, 'w', **kwargs) as dst:
+            with rio.open(output_file, "w", **kwargs) as dst:
                 for _, (ds_idxes, data) in enumerate(dl):
                     output_tensor = self.net(data.float().to(self.dev))
                     output_np = output_tensor.detach().cpu().numpy()
@@ -311,25 +328,22 @@ class Trainer():
                             prediction = output_np[0:1, 221:291, 221:291]
 
                         window = ds.get_cropped_window(
-                            idx_tensor.detach().cpu().numpy(),
-                            70,
-                            ds.aoi_transform
+                            idx_tensor.detach().cpu().numpy(), 70, ds.aoi_transform
                         )
                         dst.write(prediction, window=window)
                         swatch_np[
-                            window.row_off:window.row_off + window.height,
-                            window.col_off:window.col_off + window.width
+                            window.row_off : window.row_off + window.height,
+                            window.col_off : window.col_off + window.width,
                         ] = prediction
-            output_png = f'outputs/swatch_{i}_{self.epoch}.png'
-            rgb = Image.fromarray(np.uint8(cm(swatch_np)*255))
+            output_png = f"outputs/swatch_{i}_{self.epoch}.png"
+            rgb = Image.fromarray(np.uint8(cm(swatch_np) * 255))
             rgb.save(output_png)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--params-path',
-        help="Path to params file, see src/model/configs"
+        "--params-path", help="Path to params file, see src/model/configs"
     )
     args = parser.parse_args()
 

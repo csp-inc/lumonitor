@@ -8,30 +8,6 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 
 @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
 def convert_file(f: str, output_proj: str) -> None:
-    print(f)
-    nodata_val = -32768
-    in_ds = gdal.Open(f"data/hm/{f}")
-    big_vals = in_ds.ReadAsArray() * 10000
-    np.nan_to_num(big_vals, copy=False, nan=nodata_val)
-    out_ds = gdal_array.OpenArray(np.int16(big_vals))
-    gdal_array.CopyDatasetInfo(in_ds, out_ds)
-    gdal.Warp(
-        f"data/hm_fixed/{f}",
-        out_ds,
-        dstSRS=output_proj,
-        srcNodata=nodata_val,
-        dstNodata=nodata_val,
-        xRes=30,
-        yRes=30,
-        creationOptions=[
-            "COMPRESS=LZW",
-            "PREDICTOR=2",
-            "BLOCKXSIZE=256",
-            "BLOCKYSIZE=256",
-            "INTERLEAVE=BAND",
-            "TILED=YES",
-        ],
-    )
 
 
 os.environ["CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE"] = "YES"
@@ -46,5 +22,3 @@ output_proj = 'PROJCS["Albers Conical Equal Area",GEOGCS["NAD83",DATUM["North_Am
     if f.startswith(output_prefix)
 ]
 
-# Then i did
-# az storage blob upload-batch --account-name lumonitoreastus2 --account-key $AZURE_STORAGE_ACCESS_KEY --destination-path hm_fixed/ -d hls -s data/hm_fixed --max-connections 10
