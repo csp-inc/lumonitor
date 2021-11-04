@@ -14,6 +14,7 @@ from pandas import DataFrame
 from PIL import Image
 import rasterio as rio
 from rasterio.mask import mask
+from rasterio.merge import merge
 from shapely.geometry import box
 import torch
 from torch.utils.data import DataLoader
@@ -259,6 +260,7 @@ class Trainer:
         else:
             aoi = self.training_aoi
 
+        # Scratch that, as it wasn't working w/ all bands (test outupt was nan)
         aoi = self.test_aoi
 
         return Dataset(
@@ -281,8 +283,8 @@ class Trainer:
 
     @property
     def _is_root(self) -> bool:
-        """Returns True if this instance is the "root" instance when using
-        multiple GPUs or always if using a single GPU"""
+        """Returns True if using a single GPU/CPU or if this instance is the
+        "root" instance when using multiple GPUs"""
         return self.use_hvd and hvd.rank() == 0 or not self.use_hvd
 
     def train(self):
@@ -300,7 +302,6 @@ class Trainer:
 
             with torch.no_grad():
                 test_running_loss = self._step(loader=self.test_loader, training=False)
-                #                if self._is_root:
                 self._write_swatches()
 
             self.test_loss = test_running_loss / self.test_samples
@@ -327,12 +328,12 @@ class Trainer:
 
             outputs = self.net(inputs.float())
             loss = self.criterion(outputs.squeeze(1), labels.squeeze().float())
-            if np.isnan(loss.detach().cpu()):
-                print(f"inputs {hvd.rank()}", inputs.float().detach().cpu().numpy())
-                print(
-                    f"outputs {hvd.rank()}", outputs.squeeze(1).detach().cpu().numpy()
-                )
-                print(f"labels {hvd.rank()}", labels.squeeze().detach().cpu().numpy())
+            #            if np.isnan(loss.detach().cpu()):
+            #                print(f"inputs {hvd.rank()}", inputs.float().detach().cpu().numpy())
+            #                print(
+            #                    f"outputs {hvd.rank()}", outputs.squeeze(1).detach().cpu().numpy()
+            #                )
+            #                print(f"labels {hvd.rank()}", labels.squeeze().detach().cpu().numpy())
 
             if training:
                 loss.backward()
@@ -349,13 +350,6 @@ class Trainer:
         return running_loss
 
     def _write_swatches(self) -> None:
-        ramp = [
-            (0, "#010101"),
-            (1 / 3.0, "#ff0101"),
-            (2 / 3.0, "#ffbb01"),
-            (1, "#ffff01"),
-        ]
-        cm = LinearSegmentedColormap.from_list("urban", ramp)
         self.net.eval()
         for i, _ in self.swatches.iterrows():
             swatch = self.swatches.loc[[i]]
@@ -364,7 +358,6 @@ class Trainer:
             ds = Dataset(**swatch_kwargs)
             print(ds.num_chips)
             dl = self._get_loader(ds, batch_size=self.batch_size)
-            # dl = DataLoader(ds, batch_size=self.batch_size)
             with rio.open(self.label_file) as src:
                 kwargs = src.meta.copy()
                 out_array, transform = mask(src, [box(*ds.bounds)], crop=True)
@@ -384,31 +377,54 @@ class Trainer:
             else:
                 output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
             swatch_np = np.empty(out_array.shape)
-            with rio.open(output_file, "w", **kwargs) as dst:
-                for _, (ds_idxes, data) in enumerate(dl):
-                    output_tensor = self.net(data.to(self.dev).float())
-                    output_np = output_tensor.detach().cpu().numpy()
-                    for j, idx_tensor in enumerate(ds_idxes):
-                        if len(output_np.shape) > 3:
-                            prediction = output_np[j, :, 221:291, 221:291]
-                        else:
-                            prediction = output_np[:, 221:291, 221:291]
+            for _, (ds_idxes, data) in enumerate(dl):
+                output_tensor = self.net(data.to(self.dev).float())
+                output_np = output_tensor.detach().cpu().numpy()
+                for j, idx_tensor in enumerate(ds_idxes):
+                    if len(output_np.shape) > 3:
+                        prediction = output_np[j, :, 221:291, 221:291]
+                    else:
+                        prediction = output_np[:, 221:291, 221:291]
 
-                        window = ds.get_cropped_window(
-                            idx_tensor.detach().cpu().numpy(), 70, ds.aoi_transform
-                        )
-                        dst.write(prediction, window=window)
-                        swatch_np[
-                            :,
-                            window.row_off : window.row_off + window.height,
-                            window.col_off : window.col_off + window.width,
-                        ] = prediction
+                    window = ds.get_cropped_window(
+                        idx_tensor.detach().cpu().numpy(), 70, ds.aoi_transform
+                    )
+                    swatch_np[
+                        :,
+                        window.row_off : window.row_off + window.height,
+                        window.col_off : window.col_off + window.width,
+                    ] = prediction
+
+            with rio.open(output_file, "w", **kwargs) as dst:
+                dst.write(swatch_np)
 
             if not self.use_hvd:
-                output_png = f"outputs/swatch_{i}_{self.epoch}_{hvd.rank()}.png"
-                # Save the first band (could do rgb if you wanted I think)
-                rgb = Image.fromarray(np.uint8(cm(swatch_np[0, :, :]) * 255))
-                rgb.save(output_png)
+                self._write_swatch_png(swatch_np, i)
+
+    def _merge_swatches(self) -> None:
+        for i, _ in self.swatches.iterrows():
+            swatch_dss = [
+                rio.open(os.path.join("outputs", f))
+                for f in os.listdir("outputs")
+                if f.startswith(f"swatch_{i}_{self.epoch}")
+            ]
+            output_path = f"outputs/swatch_{i}_{self.epoch}.tif"
+            merge(swatch_dss, dst_path=output_path)
+            swatch_np = rio.open(output_path).read()
+            self._write_swatch_png(swatch_np, i)
+
+    def _write_swatch_png(self, data: np.ndarray, swatch_idx: int) -> None:
+        ramp = [
+            (0, "#010101"),
+            (1 / 3.0, "#ff0101"),
+            (2 / 3.0, "#ffbb01"),
+            (1, "#ffff01"),
+        ]
+        cm = LinearSegmentedColormap.from_list("urban", ramp)
+        output_png = f"outputs/swatch_{swatch_idx}_{self.epoch}.png"
+        # Save the first band (could do rgb if you wanted I think)
+        rgb = Image.fromarray(np.uint8(cm(data[0, :, :]) * 255))
+        rgb.save(output_png)
 
 
 if __name__ == "__main__":

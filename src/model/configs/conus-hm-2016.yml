@@ -13,4 +13,4 @@ num_workers: 6
 label_file: '/vsiaz/hls/hm_fixed/HM_ee_2017_v014_500_30.vrt'
 chipper: hm_chipper
 use_hvd: true
-num_gpus: 4
+num_gpus: 15

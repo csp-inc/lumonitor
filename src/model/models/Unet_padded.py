@@ -2,28 +2,31 @@ import torch
 import torch.nn as nn
 from torch.nn.functional import interpolate
 
+
 def conv_block(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, 3, padding=1),
         nn.BatchNorm2d(out_channels),
-        nn.ReLU(inplace=True),
+        nn.SELU(inplace=True),
         nn.Conv2d(out_channels, out_channels, 3, padding=1),
         nn.BatchNorm2d(out_channels),
-        nn.ReLU(inplace=True)
+        nn.SELU(inplace=True),
     )
+
 
 def decoder_block(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
-        nn.Upsample(scale_factor=2),
-        nn.Conv2d(in_channels, out_channels, 3, padding=1)
+        nn.Upsample(scale_factor=2), nn.Conv2d(in_channels, out_channels, 3, padding=1)
     )
+
 
 def norm_relu(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
         nn.BatchNorm2d(in_channels),
-        nn.ReLU(inplace=True),
-        conv_block(in_channels, out_channels)
+        nn.SELU(inplace=True),
+        conv_block(in_channels, out_channels),
     )
+
 
 class Unet(torch.nn.Module):
     def __init__(self, in_channels: int, out_channels: int = 1):
@@ -45,10 +48,7 @@ class Unet(torch.nn.Module):
         self.post_decoder_1 = norm_relu(128, 64)
         self.decoder_block_0 = decoder_block(64, 32)
         self.post_decoder_0 = norm_relu(64, 32)
-        self.output = nn.Sequential(
-            nn.Conv2d(32, out_channels, (1, 1)),
-            nn.Sigmoid()
-        )
+        self.output = nn.Sequential(nn.Conv2d(32, out_channels, (1, 1)), nn.Sigmoid())
 
     def forward(self, x):
         encoder_0 = self.encoder_block_0(x)
