@@ -42,3 +42,13 @@ aoi_file: conus.geojson
 # batch size
 batch_size: 8
 
+# function to use to get the training chip from the raw image data
+# (See src/train.py)
+chipper: nlcd_chipper
+
+
+# whether to use horovod for training or not
+use_hvd: false
+
+# number of gpus to use if use_hvd is true
+num_gpus: 1

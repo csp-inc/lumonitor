@@ -29,6 +29,7 @@ def worker_init_fn(worker_id):
 
 
 def set_seed(seed: int) -> None:
+    """Basically set the seed in all possible ways"""
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.cuda.manual_seed(seed)
@@ -60,21 +61,38 @@ def hm_chipper(chip_raw: np.ndarray) -> np.ndarray:
 
 @dataclass
 class Trainer:
-    epochs: int
-    training_samples: int
-    test_samples: int
+    epochs: int  # number of epochs
+    training_samples: int  # number of training samples
+    test_samples: int  # number of test samples
+    use_hvd: bool  # whether to use horovod multiprocessing or not
+    batch_size: int = 8
+    chip_size: int = 512  # value of the w & h for each sample
+
+    # Function to convert raw data read from the label file into the range and type of
+    # training data. e.g. divide nlcd by 100 and convert to float
+    chipper: Callable = nlcd_chipper
+
+    # Source of the label data, should have the same projection, extent, etc
+    # as the training file
     label_file: str = "/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif"
-    training_file: str = "/vsiaz/hls/cog/conus_hls_median_2016.vrt"
-    learning_rate: float = 0.01
+
+    learning_rate: float = 0.01  # Initial learning rate
     learning_schedule_gamma: float = 0.975
     momentum: float = 0.8
-    chip_size: int = 512
-    chipper: Callable = nlcd_chipper
-    training_aoi_file: str = "conus.geojson"
-    test_aoi_file: str = "conus.geojson"
-    batch_size: int = 8
+
+    # Number of gpus to use; only relevant if use_hvd is True
+    num_gpus: int = 1
+
+    # Number of workers each dataloader uses to read data
     num_workers: int = 6
-    seed: int = 1337
+    seed: int = 1337  # Random seed
+    test_aoi_file: str = "conus.geojson"  # AOI within which to pull test data
+
+    # Source of the training data
+    training_file: str = "/vsiaz/hls/cog/conus_hls_median_2016.vrt"
+
+    # AOI within which to pull training data
+    training_aoi_file: str = "conus.geojson"
 
     def __post_init__(self):
         self.run = Run.get_context()
@@ -84,10 +102,21 @@ class Trainer:
         self.test_aoi = self._load_aoi(path, self.test_aoi_file)
         self.num_training_bands, self.res = self._get_raster_specs(self.training_file)
         self.num_label_bands, _ = self._get_raster_specs(self.label_file)
-        self.dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        if self.use_hvd:
+            # Scale the learning rate based on the number of gpus,
+            # see https://horovod.readthedocs.io/en/stable/pytorch.html
+            self.learning_rate *= self.num_gpus
+
+        # As long as there is only 1 gpu per node this will always be 0
+        local_rank = hvd.local_rank() if self.use_hvd else 0
+
+        self.dev = torch.device(
+            "cuda:" + str(local_rank) if torch.cuda.is_available() else "cpu"
+        )
+        print("Using device:", self.dev)
         set_seed(self.seed)
 
-        print("Using device:", self.dev)
         self.net = (
             Unet(self.num_training_bands, self.num_label_bands).float().to(self.dev)
         )
@@ -120,20 +149,26 @@ class Trainer:
             "worker_init_fn": worker_init_fn,
         }
 
-        self.test_loader = DataLoader(
+        self.test_loader = self._get_loader(
             Dataset(
                 num_training_chips=self.test_samples,
                 aoi=self.test_aoi,
                 **self.dataset_kwargs,
             ),
             shuffle=False,
-            **self.dataloader_kwargs,
         )
 
         self.criterion = nn.MSELoss()
-        self.optimizer = optim.SGD(
+        # self.criterion = nn.BCEWithLogitsLoss()
+        # self.criterion = nn.CrossEntropyLoss()
+        _optimizer = optim.SGD(
             self.net.parameters(), lr=self.learning_rate, momentum=self.momentum
         )
+
+        self.optimizer = (
+            hvd.DistributedOptimizer(_optimizer) if self.use_hvd else _optimizer
+        )
+
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer, lr_lambda=self._get_lr_lambda
         )
@@ -145,8 +180,9 @@ class Trainer:
     @loss.setter
     def loss(self, value):
         self._loss = value
-        print("Loss: %.4f" % value)
-        self.run.log("Training Loss", value)
+        if self._is_root:
+            print("Loss: %.4f" % value)
+            self.run.log("Training Loss", value)
 
     @property
     def test_loss(self):
@@ -155,35 +191,42 @@ class Trainer:
     @test_loss.setter
     def test_loss(self, value):
         self._test_loss = value
-        print("Test loss: %.4f" % value)
-        self.run.log("Test Loss", value)
+        if self._is_root:
+            print("Test loss: %.4f" % value)
+            self.run.log("Test Loss", value)
 
     @property
     def epoch(self):
+        """Current epoch"""
         return self._epoch
 
     @epoch.setter
     def epoch(self, value):
         self._epoch = value
-        print("Epoch: ", value)
-        self.run.log("Epoch", value)
+        if self._is_root:
+            print("Epoch: ", value)
+            self.run.log("Epoch", value)
 
     @property
     def lr(self):
+        """Current learning rate"""
         return self._lr
 
     @lr.setter
     def lr(self, value):
         self._lr = value
-        print("LR: %.4f" % value)
-        self.run.log("lr", value)
+        if self._is_root:
+            print("LR: %.4f" % value)
+            self.run.log("lr", value)
 
-    def _write_log(self) -> None:
+    def _write_log(self, output_csv: str = "./outputs/log.csv") -> None:
+        """Log current epoch, training and test loss, and learning rate to
+        a csv file"""
         row = dict(
             epoch=self.epoch, loss=self.loss, test_loss=self.test_loss, lr=self.lr
         )
         self.log_df = self.log_df.append(row, ignore_index=True)
-        self.log_df.to_csv("./outputs/log.csv", index=False)
+        self.log_df.to_csv(output_csv, index=False)
 
     def _get_lr_lambda(self, epoch: int) -> float:
         return self.learning_schedule_gamma ** epoch
@@ -209,77 +252,101 @@ class Trainer:
         return self.net.forward(test_chip).shape[2]
 
     def _get_training_ds(self) -> Dataset:
+        """Modify the search area so samples are heavily focused on urban areas
+        in early epochs"""
         if self.epoch > 10:
             aoi = self.test_aoi
         else:
             aoi = self.training_aoi
 
+        aoi = self.test_aoi
+
         return Dataset(
             num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
         )
 
-    def _get_loader(self, ds: Dataset) -> DataLoader:
-        return DataLoader(ds, shuffle=True, **self.dataloader_kwargs)
+    def _get_loader(self, ds: Dataset, **kwargs) -> DataLoader:
+        args = {**self.dataloader_kwargs, **kwargs}
+        if self.use_hvd:
+
+            sampler = torch.utils.data.distributed.DistributedSampler(
+                ds, num_replicas=hvd.size(), rank=hvd.rank()
+            )
+            # Can't use both shuffle and sampler args
+            if "shuffle" in args.keys():
+                args.pop("shuffle")
+            args = {**args, **dict(sampler=sampler)}
+
+        return DataLoader(ds, **args)
+
+    @property
+    def _is_root(self) -> bool:
+        """Returns True if this instance is the "root" instance when using
+        multiple GPUs or always if using a single GPU"""
+        return self.use_hvd and hvd.rank() == 0 or not self.use_hvd
 
     def train(self):
+        if self.use_hvd:
+            hvd.broadcast_parameters(self.net.state_dict(), root_rank=0)
+            hvd.broadcast_optimizer_state(self.optimizer, root_rank=0)
+
         for self.epoch in range(self.epochs):
 
             # Reset this at each epoch so samples change
             ds = self._get_training_ds()
-            loader = self._get_loader(ds)
+            loader = self._get_loader(ds, shuffle=True)
 
-            running_loss = self._train_step(loader)
-
-            self.loss = running_loss / self.training_samples
+            self.loss = self._step(loader) / self.training_samples
 
             with torch.no_grad():
-                test_running_loss = self._eval_step()
+                test_running_loss = self._step(loader=self.test_loader, training=False)
+                #                if self._is_root:
                 self._write_swatches()
 
             self.test_loss = test_running_loss / self.test_samples
             self.lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step()
 
-            torch.save(self.net.state_dict(), "./outputs/model.pt")
-            self._write_log()
+            if self._is_root:
+                self._write_log()
+                if self.use_hvd:
+                    self._merge_swatches()
+                torch.save(self.net.state_dict(), "./outputs/model.pt")
 
-    def _train_step(self, loader: DataLoader) -> float:
+    def _step(self, loader: DataLoader, training: bool = True) -> float:
         running_loss = 0.0
-        self.net.train()
-        for _, (idxs, data) in enumerate(loader):
+        self.net.train() if training else self.net.eval()
+
+        for _, (_, data) in enumerate(loader):
             inputs, labels = data
             inputs = inputs.to(self.dev)
             labels = labels.to(self.dev)
-            self.optimizer.zero_grad()
+
+            if training:
+                self.optimizer.zero_grad()
 
             outputs = self.net(inputs.float())
+            loss = self.criterion(outputs.squeeze(1), labels.squeeze().float())
+            if np.isnan(loss.detach().cpu()):
+                print(f"inputs {hvd.rank()}", inputs.float().detach().cpu().numpy())
+                print(
+                    f"outputs {hvd.rank()}", outputs.squeeze(1).detach().cpu().numpy()
+                )
+                print(f"labels {hvd.rank()}", labels.squeeze().detach().cpu().numpy())
 
-            loss = self.criterion(outputs.squeeze(1), labels.float())
-            loss.backward()
-            self.optimizer.step()
+            if training:
+                loss.backward()
+                self.optimizer.step()
             running_loss += loss.item() * self.batch_size
+
+        if self.use_hvd:
+            running_loss = hvd.allreduce(
+                torch.tensor(running_loss), name="avg_loss"
+            ).item()
+
         inputs.detach()
         labels.detach()
         return running_loss
-
-    def _eval_step(self) -> float:
-        test_running_loss = 0.0
-        self.net.eval()
-        for _, (idxs, test_data) in enumerate(self.test_loader):
-            inputs, labels = test_data
-            inputs = inputs.to(self.dev)
-            # print('input (1st band)', inputs[0, 0, :, :])
-            # print('input has nan ', any(torch.isnan(torch.flatten(inputs))))
-            labels = labels.to(self.dev)
-            # print('label', labels[0, :, :])
-            # print('label has nan ', any(torch.isnan(torch.flatten(labels))))
-            outputs = self.net(inputs.float())
-            # print('output', outputs[0, 0, :, :])
-            loss = self.criterion(outputs.squeeze(1), labels.float())
-            test_running_loss += loss.item() * self.batch_size
-        inputs.detach()
-        labels.detach()
-        return test_running_loss
 
     def _write_swatches(self) -> None:
         ramp = [
@@ -289,8 +356,6 @@ class Trainer:
             (1, "#ffff01"),
         ]
         cm = LinearSegmentedColormap.from_list("urban", ramp)
-        swatch_dataloader_kwargs = self.dataloader_kwargs.copy()
-        swatch_dataloader_kwargs.update({"batch_size": 1})
         self.net.eval()
         for i, _ in self.swatches.iterrows():
             swatch = self.swatches.loc[[i]]
@@ -298,14 +363,13 @@ class Trainer:
             swatch_kwargs.update({"aoi": swatch, "mode": "predict"})
             ds = Dataset(**swatch_kwargs)
             print(ds.num_chips)
-            # This may need to be different for prediction, not sure (prob. not)
-            dl = DataLoader(ds, batch_size=self.batch_size)
-            with rio.open(self.training_file) as src:
+            dl = self._get_loader(ds, batch_size=self.batch_size)
+            # dl = DataLoader(ds, batch_size=self.batch_size)
+            with rio.open(self.label_file) as src:
                 kwargs = src.meta.copy()
                 out_array, transform = mask(src, [box(*ds.bounds)], crop=True)
             kwargs.update(
                 {
-                    "count": 1,
                     "dtype": "float32",
                     "driver": "GTiff",
                     "bounds": ds.bounds,
@@ -315,29 +379,36 @@ class Trainer:
                 }
             )
 
-            output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
-            swatch_np = np.empty((out_array.shape[1], out_array.shape[2]))
+            if self.use_hvd:
+                output_file = f"outputs/swatch_{i}_{self.epoch}_{hvd.rank()}.tif"
+            else:
+                output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
+            swatch_np = np.empty(out_array.shape)
             with rio.open(output_file, "w", **kwargs) as dst:
                 for _, (ds_idxes, data) in enumerate(dl):
-                    output_tensor = self.net(data.float().to(self.dev))
+                    output_tensor = self.net(data.to(self.dev).float())
                     output_np = output_tensor.detach().cpu().numpy()
                     for j, idx_tensor in enumerate(ds_idxes):
                         if len(output_np.shape) > 3:
-                            prediction = output_np[j, 0:1, 221:291, 221:291]
+                            prediction = output_np[j, :, 221:291, 221:291]
                         else:
-                            prediction = output_np[0:1, 221:291, 221:291]
+                            prediction = output_np[:, 221:291, 221:291]
 
                         window = ds.get_cropped_window(
                             idx_tensor.detach().cpu().numpy(), 70, ds.aoi_transform
                         )
                         dst.write(prediction, window=window)
                         swatch_np[
+                            :,
                             window.row_off : window.row_off + window.height,
                             window.col_off : window.col_off + window.width,
                         ] = prediction
-            output_png = f"outputs/swatch_{i}_{self.epoch}.png"
-            rgb = Image.fromarray(np.uint8(cm(swatch_np) * 255))
-            rgb.save(output_png)
+
+            if not self.use_hvd:
+                output_png = f"outputs/swatch_{i}_{self.epoch}_{hvd.rank()}.png"
+                # Save the first band (could do rgb if you wanted I think)
+                rgb = Image.fromarray(np.uint8(cm(swatch_np[0, :, :]) * 255))
+                rgb.save(output_png)
 
 
 if __name__ == "__main__":
@@ -349,6 +420,15 @@ if __name__ == "__main__":
 
     with open(args.params_path) as f:
         params = yaml.safe_load(f)
+
+    if params["use_hvd"]:
+        import horovod.torch as hvd
+
+        hvd.init()
+
+    for param in ["chipper", "criterion"]:
+        if param in params.keys():
+            params[param] = globals()[params[param]]
 
     run = Run.get_context()
     for k, v in params.items():

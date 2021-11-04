@@ -1,11 +1,12 @@
 from math import ceil, floor, sqrt
-from typing import Callable
+from typing import Callable, Generator, Tuple
 
 from affine import Affine
 import geopandas as gpd
 from geopandas import GeoDataFrame, GeoSeries
 import numpy as np
 from numpy.ma import masked_array
+from pandas import Series
 from pygeos.creation import points, prepare
 import pygeos
 import rasterio as rio
@@ -16,8 +17,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed, RetryError
 from torch.utils.data.dataset import Dataset
 
 
-# correct return type ? Iterable??
-def range_with_end(start: int, end: int, step: int) -> int:
+def range_with_end(start: int, end: int, step: int) -> Generator[int, None, None]:
     i = start
     while i < end:
         yield i
@@ -36,7 +36,7 @@ class MosaicDataset(Dataset):
         aoi: GeoDataFrame = None,
         label_file: str = None,
         label_bands: int = 1,
-        mode: str = "train",
+        mode: str = "train",  # Either "train" or "predict"
         num_training_chips: int = 0,
     ):
         self.feature_file = feature_file
@@ -102,21 +102,18 @@ class MosaicDataset(Dataset):
 
         return None
 
-    def _get_indices(self):
-        # returns (pd.Series, pd.Series)
-        if self.mode == "train":
-            upper_left_points = self._get_random_points()
-        else:
-            upper_left_points = self._get_grid_points()
+    def _get_indices(self) -> Tuple[Series, Series]:
+        upper_left_points = (
+            self._get_random_points()
+            if self.mode == "train"
+            else self._get_grid_points()
+        )
 
         return upper_left_points.x, upper_left_points.y
 
-    def _replace_index(self, idx: int):
-        print(f"replacing point at index {idx}")
-        point = self._get_random_points(1)
-        self.chip_xs[idx], self.chip_ys[idx] = point.x[0], point.y[0]
-
     def _get_random_points(self, n: int = None) -> GeoSeries:
+        """Returns a Geoseries with the upper left corner of n points whose
+        entire extents are within the AOI"""
         if n is None:
             n = self.num_chips
 
@@ -124,6 +121,8 @@ class MosaicDataset(Dataset):
 
         upper_left_points = GeoSeries([])
         while len(upper_left_points) < self.num_chips:
+            # Sample 2x n so when we clip to the AOI there are hopefully enough
+            # (no I don't check)
             x = np.random.uniform(x_min, x_max, n * 2)
             y = np.random.uniform(y_min, y_max, n * 2)
             new_points = self._points_in_aoi(points(x, y))
@@ -132,6 +131,8 @@ class MosaicDataset(Dataset):
         return upper_left_points[0:n]
 
     def _get_grid_points(self) -> GeoSeries:
+        """Returns a Geoseries of points of upper left corners to cover the entire
+        bounds"""
         x_min, y_min, x_max, y_max = self.bounds
 
         feature_chip_size_map = self.feature_chip_size * self.res
@@ -153,8 +154,18 @@ class MosaicDataset(Dataset):
 
         return self._points_in_aoi(points(pts))
 
-    # np.ndarray created by pygeos.creation.points
+    def _replace_index(self, idx: int) -> None:
+        """Replace the point at idx with a new one. Supposed to be used to
+        'repair' errors for certain points, but in actuality the errors are
+        often due to network I/O cutouts."""
+        print(f"replacing point at index {idx}")
+        point = self._get_random_points(1)
+        self.chip_xs[idx], self.chip_ys[idx] = point.x[0], point.y[0]
+
     def _points_in_aoi(self, pts: np.ndarray) -> GeoSeries:
+        """If self.aoi is set, returns the subset of points which are within
+        it. Otherwise just returns pts. Note pts is typically created by
+        pygeos.creation.points"""
         if self.aoi is not None:
             aoi = pygeos.io.from_shapely(self.aoi.unary_union)
             prepare(aoi)
@@ -164,6 +175,9 @@ class MosaicDataset(Dataset):
         return GeoSeries(pts)
 
     def _get_window(self, idx: int, transform: Affine = None) -> Window:
+        """Returns a Window in the given transformation with sides of
+        self.feature_chip_size and with an upper left corner self.chip_xs[idx],
+        self.chip_ys[idx]"""
         if transform is None:
             transform = self.input_transform
 
@@ -172,6 +186,7 @@ class MosaicDataset(Dataset):
         return Window(col_off, row_off, self.feature_chip_size, self.feature_chip_size)
 
     def _center_crop_window(self, window: Window, size: int) -> Window:
+        """For a given window, crops to the central size x size square"""
         col_off = window.col_off + window.width // 2 - (size // 2)
         row_off = window.row_off + window.height // 2 - (size // 2)
         return Window(col_off, row_off, size, size)
@@ -201,7 +216,7 @@ class MosaicDataset(Dataset):
                 * img_ds.scales[0]
             )
             # A couple leaps here ^^^^^
-        return img_chip
+        return np.nan_to_num(img_chip, copy=False)
 
     def _get_label_chip(self, window: Window):
         label_window = self._center_crop_window(window, self.output_chip_size)
@@ -211,9 +226,9 @@ class MosaicDataset(Dataset):
                 label_ds, {"indexes": self.label_bands, "window": label_window}
             )
 
-        return self.chip_from_raw_chip(label_chip_raw)
+        return np.nan_to_num(self.chip_from_raw_chip(label_chip_raw), copy=False)
 
-    def _get_chips_for_idx(self, idx: int):
+    def _get_chip_for_idx(self, idx: int):
         window = self._get_window(idx)
         img_chip = self._get_img_chip(window)
 
@@ -225,11 +240,11 @@ class MosaicDataset(Dataset):
 
     def __getitem__(self, idx: int):
         try:
-            item = self._get_chips_for_idx(idx)
+            item = self._get_chip_for_idx(idx)
         except RetryError as e:
             if self.mode == "train":
                 self._replace_index(idx)
-                item = self._get_chips_for_idx(idx)
+                item = self._get_chip_for_idx(idx)
             else:
                 raise e
 
