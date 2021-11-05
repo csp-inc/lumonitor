@@ -5,7 +5,7 @@ test_samples: 1000
 #test_samples: 10
 learning_rate: 0.02
 learning_schedule_gamma: 0.99
-loss_function: nn.MSELoss
+#loss_function: nn.MSELoss
 loss_function: nn.BCEWithLogitsLoss
 seed: 1337
 training_aoi_file: 'urban_training_areas.gpkg'
@@ -15,4 +15,4 @@ num_workers: 6
 label_file: '/vsiaz/hls/hm_fixed/HM_ee_2017_v014_500_30.vrt'
 chipper: hm_chipper
 use_hvd: true
-num_gpus: 15
+num_gpus: 8

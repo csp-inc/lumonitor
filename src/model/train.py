@@ -311,10 +311,6 @@ class Trainer:
 
             if self._is_root:
                 self._write_log()
-                # All the other nodes are probably not finished yet, but
-                # they will be finished with the _last_ epoch
-                if self.use_hvd and self.epoch > 0:
-                    self._merge_swatches(self.epoch - 1)
                 torch.save(self.net.state_dict(), "./outputs/model.pt")
 
     def _step(self, loader: DataLoader, training: bool = True) -> float:
@@ -359,7 +355,6 @@ class Trainer:
             swatch_kwargs = self.dataset_kwargs.copy()
             swatch_kwargs.update({"aoi": swatch, "mode": "predict"})
             ds = Dataset(**swatch_kwargs)
-            print(ds.num_chips)
             dl = self._get_loader(ds, batch_size=self.batch_size)
             with rio.open(self.label_file) as src:
                 kwargs = src.meta.copy()
@@ -375,14 +370,10 @@ class Trainer:
                 }
             )
 
-            if self.use_hvd:
-                output_file = f"outputs/swatch_{i}_{self.epoch}_{hvd.rank()}.tif"
-            else:
-                output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
-            swatch_np = np.empty(out_array.shape)
+            swatch_np = torch.ones(out_array.shape) * -32768
             for _, (ds_idxes, data) in enumerate(dl):
                 output_tensor = self.net(data.to(self.dev).float())
-                output_np = output_tensor.detach().cpu().numpy()
+                output_np = output_tensor.detach().cpu()  # .numpy()
                 for j, idx_tensor in enumerate(ds_idxes):
                     if len(output_np.shape) > 3:
                         prediction = output_np[j, :, 221:291, 221:291]
@@ -398,28 +389,15 @@ class Trainer:
                         window.col_off : window.col_off + window.width,
                     ] = prediction
 
-            with rio.open(output_file, "w", **kwargs) as dst:
-                dst.write(swatch_np.astype(np.float32))
-
-            if not self.use_hvd:
-                self._write_swatch_png(swatch_np, i)
-
-    def _merge_swatches(self, epoch: int) -> None:
-        print(os.listdir("outputs"))
-        for i, _ in self.swatches.iterrows():
-
-            swatch_dss = [
-                rio.open(os.path.join("outputs", f))
-                for f in os.listdir("outputs")
-                if f.startswith(f"swatch_{i}_{epoch}")
-            ]
-            output_path = f"outputs/swatch_{i}_{epoch}.tif"
-            # Works as long as nodata is way neg, otherwise
-            # I think we need a custom fxn (masked=True didn't work)
-            print(swatch_dss)
-            merge(swatch_dss, dst_path=output_path, method="max")
-            swatch_np = rio.open(output_path).read()
-            self._write_swatch_png(swatch_np, i, epoch)
+            all_swatches = hvd.allgather_object(swatch_np)
+            if self._is_root:
+                all_swatches_np = np.maximum.reduce([l.numpy() for l in all_swatches])
+                output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
+                with rio.open(output_file, "w", **kwargs) as dst:
+                    dst.write(all_swatches_np.astype(np.float32))
+                self._write_swatch_png(
+                    all_swatches_np.astype(np.float32), i, self.epoch
+                )
 
     def _write_swatch_png(self, data: np.ndarray, swatch_idx: int, epoch: int) -> None:
         ramp = [
