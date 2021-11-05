@@ -5,6 +5,8 @@ test_samples: 1000
 #test_samples: 10
 learning_rate: 0.02
 learning_schedule_gamma: 0.99
+loss_function: nn.MSELoss
+loss_function: nn.BCEWithLogitsLoss
 seed: 1337
 training_aoi_file: 'urban_training_areas.gpkg'
 test_aoi_file: 'conus.geojson'

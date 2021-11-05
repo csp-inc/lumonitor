@@ -79,6 +79,8 @@ class Trainer:
 
     learning_rate: float = 0.01  # Initial learning rate
     learning_schedule_gamma: float = 0.975
+
+    loss_function: Callable = nn.MSELoss
     momentum: float = 0.8
 
     # Number of gpus to use; only relevant if use_hvd is True
@@ -123,6 +125,8 @@ class Trainer:
         )
         self.output_chip_size = self._get_output_chip_size()
 
+        self.loss_function = self.loss_function()
+
         self._loss = None
         self._test_loss = None
         self._lr = None
@@ -159,9 +163,6 @@ class Trainer:
             shuffle=False,
         )
 
-        self.criterion = nn.MSELoss()
-        # self.criterion = nn.BCEWithLogitsLoss()
-        # self.criterion = nn.CrossEntropyLoss()
         _optimizer = optim.SGD(
             self.net.parameters(), lr=self.learning_rate, momentum=self.momentum
         )
@@ -310,8 +311,10 @@ class Trainer:
 
             if self._is_root:
                 self._write_log()
-                if self.use_hvd:
-                    self._merge_swatches()
+                # All the other nodes are probably not finished yet, but
+                # they will be finished with the _last_ epoch
+                if self.use_hvd and self.epoch > 0:
+                    self._merge_swatches(self.epoch - 1)
                 torch.save(self.net.state_dict(), "./outputs/model.pt")
 
     def _step(self, loader: DataLoader, training: bool = True) -> float:
@@ -327,7 +330,7 @@ class Trainer:
                 self.optimizer.zero_grad()
 
             outputs = self.net(inputs.float())
-            loss = self.criterion(outputs.squeeze(1), labels.squeeze().float())
+            loss = self.loss_function(outputs.squeeze(1), labels.squeeze().float())
             #            if np.isnan(loss.detach().cpu()):
             #                print(f"inputs {hvd.rank()}", inputs.float().detach().cpu().numpy())
             #                print(
@@ -396,24 +399,29 @@ class Trainer:
                     ] = prediction
 
             with rio.open(output_file, "w", **kwargs) as dst:
-                dst.write(swatch_np)
+                dst.write(swatch_np.astype(np.float32))
 
             if not self.use_hvd:
                 self._write_swatch_png(swatch_np, i)
 
-    def _merge_swatches(self) -> None:
+    def _merge_swatches(self, epoch: int) -> None:
+        print(os.listdir("outputs"))
         for i, _ in self.swatches.iterrows():
+
             swatch_dss = [
                 rio.open(os.path.join("outputs", f))
                 for f in os.listdir("outputs")
-                if f.startswith(f"swatch_{i}_{self.epoch}")
+                if f.startswith(f"swatch_{i}_{epoch}")
             ]
-            output_path = f"outputs/swatch_{i}_{self.epoch}.tif"
-            merge(swatch_dss, dst_path=output_path)
+            output_path = f"outputs/swatch_{i}_{epoch}.tif"
+            # Works as long as nodata is way neg, otherwise
+            # I think we need a custom fxn (masked=True didn't work)
+            print(swatch_dss)
+            merge(swatch_dss, dst_path=output_path, method="max")
             swatch_np = rio.open(output_path).read()
-            self._write_swatch_png(swatch_np, i)
+            self._write_swatch_png(swatch_np, i, epoch)
 
-    def _write_swatch_png(self, data: np.ndarray, swatch_idx: int) -> None:
+    def _write_swatch_png(self, data: np.ndarray, swatch_idx: int, epoch: int) -> None:
         ramp = [
             (0, "#010101"),
             (1 / 3.0, "#ff0101"),
@@ -421,7 +429,7 @@ class Trainer:
             (1, "#ffff01"),
         ]
         cm = LinearSegmentedColormap.from_list("urban", ramp)
-        output_png = f"outputs/swatch_{swatch_idx}_{self.epoch}.png"
+        output_png = f"outputs/swatch_{swatch_idx}_{epoch}.png"
         # Save the first band (could do rgb if you wanted I think)
         rgb = Image.fromarray(np.uint8(cm(data[0, :, :]) * 255))
         rgb.save(output_png)
@@ -442,9 +450,15 @@ if __name__ == "__main__":
 
         hvd.init()
 
-    for param in ["chipper", "criterion"]:
+    for param in ["chipper", "loss_function"]:
         if param in params.keys():
-            params[param] = globals()[params[param]]
+            value = params[param]
+            # of the form module.function, only works with one dot
+            if "." in value:
+                mod_func = value.split(".")
+                params[param] = getattr(globals()[mod_func[0]], mod_func[1])
+            else:
+                params[param] = globals()[value]
 
     run = Run.get_context()
     for k, v in params.items():
