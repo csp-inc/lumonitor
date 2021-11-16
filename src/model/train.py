@@ -2,7 +2,7 @@ import argparse
 from dataclasses import dataclass
 import os
 import random
-from typing import Callable
+from typing import Callable, List, Optional
 import yaml
 
 from azureml.core import Run
@@ -23,6 +23,10 @@ import torch.optim as optim
 
 from datasets.MosaicDataset import MosaicDataset as Dataset
 from models.Unet_padded import Unet
+from utils import get_device
+
+# For now this, but fix later
+from utils.chippers import nlcd_chipper, hm_chipper
 
 
 def worker_init_fn(worker_id):
@@ -38,26 +42,6 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
-def nlcd_chipper(chip_raw: np.ndarray) -> np.ndarray:
-    # Don't know where these -1000s are coming from, but
-    # they are there on read
-    masked = (chip_raw > 100) | (chip_raw == -1000)
-    # Replace nodatas with 0,
-    # then divide by 100 for real values
-    return (
-        masked_array(
-            chip_raw,
-            mask=masked,
-        ).filled(0)
-        / 100.0
-    )
-
-
-def hm_chipper(chip_raw: np.ndarray) -> np.ndarray:
-    masked = chip_raw == -32768
-    return masked_array(chip_raw, mask=masked).filled(0) / 10000.0
 
 
 @dataclass
@@ -76,15 +60,14 @@ class Trainer:
     # Source of the label data, should have the same projection, extent, etc
     # as the training file
     label_file: str = "/vsiaz/hls/NLCD_2016_Impervious_L48_20190405.tif"
+    # The indices of the band(s) to use for labeling. These are 1-indexed.
+    label_bands: Optional[List] = None
 
     learning_rate: float = 0.01  # Initial learning rate
     learning_schedule_gamma: float = 0.975
 
     loss_function: Callable = nn.MSELoss
     momentum: float = 0.8
-
-    # Number of gpus to use; only relevant if use_hvd is True
-    num_gpus: int = 1
 
     # Number of workers each dataloader uses to read data
     num_workers: int = 6
@@ -104,47 +87,34 @@ class Trainer:
         self.training_aoi = self._load_aoi(path, self.training_aoi_file)
         self.test_aoi = self._load_aoi(path, self.test_aoi_file)
         self.num_training_bands, self.res = self._get_raster_specs(self.training_file)
-        self.num_label_bands, _ = self._get_raster_specs(self.label_file)
 
         if self.use_hvd:
             # Scale the learning rate based on the number of gpus,
             # see https://horovod.readthedocs.io/en/stable/pytorch.html
-            self.learning_rate *= self.num_gpus
+            self.learning_rate *= hvd.size()
 
-        # As long as there is only 1 gpu per node this will always be 0
-        local_rank = hvd.local_rank() if self.use_hvd else 0
-
-        self.dev = torch.device(
-            "cuda:" + str(local_rank) if torch.cuda.is_available() else "cpu"
-        )
+        self.dev = get_device(self.use_hvd)
         print("Using device:", self.dev)
         set_seed(self.seed)
+
+        if self.label_bands is None:
+            num_label_bands, _ = self._get_raster_specs(self.label_file)
+            self.label_bands = (
+                range(1, num_label_bands + 1) if num_label_bands > 1 else 1
+            )
+        self.num_label_bands = len(self.label_bands)
 
         self.net = (
             Unet(self.num_training_bands, self.num_label_bands).float().to(self.dev)
         )
         self.output_chip_size = self._get_output_chip_size()
 
-        self.loss_function = self.loss_function()
-
-        self._loss = None
-        self._test_loss = None
-        self._lr = None
-        self._epoch = None
-        self.log_df = DataFrame(columns=["epoch", "loss", "test_loss", "lr"])
-
-        swatch_file = os.path.join(path, "swatches.gpkg")
-        self.swatches = gpd.read_file(swatch_file)
-        label_bands = (
-            range(1, self.num_label_bands + 1) if self.num_label_bands > 1 else 1
-        )
-
         self.dataset_kwargs = {
             "feature_file": self.training_file,
             "feature_chip_size": self.chip_size,
             "output_chip_size": self.output_chip_size,
             "label_file": self.label_file,
-            "label_bands": label_bands,
+            "label_bands": self.label_bands,
             "chip_from_raw_chip": self.chipper,
         }
         self.dataloader_kwargs = {
@@ -162,6 +132,17 @@ class Trainer:
             ),
             shuffle=False,
         )
+
+        self.loss_function = self.loss_function()
+
+        self._loss = None
+        self._test_loss = None
+        self._lr = None
+        self._epoch = None
+        self.log_df = DataFrame(columns=["epoch", "loss", "test_loss", "lr"])
+
+        swatch_file = os.path.join(path, "swatches.gpkg")
+        self.swatches = gpd.read_file(swatch_file)
 
         _optimizer = optim.SGD(
             self.net.parameters(), lr=self.learning_rate, momentum=self.momentum
@@ -262,7 +243,7 @@ class Trainer:
             aoi = self.training_aoi
 
         # Scratch that, as it wasn't working w/ all bands (test outupt was nan)
-        aoi = self.test_aoi
+        # aoi = self.test_aoi
 
         return Dataset(
             num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
@@ -326,7 +307,7 @@ class Trainer:
                 self.optimizer.zero_grad()
 
             outputs = self.net(inputs.float())
-            loss = self.loss_function(outputs.squeeze(1), labels.squeeze().float())
+            loss = self.loss_function(outputs.squeeze(), labels.squeeze().float())
             #            if np.isnan(loss.detach().cpu()):
             #                print(f"inputs {hvd.rank()}", inputs.float().detach().cpu().numpy())
             #                print(
@@ -418,10 +399,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "--params-path", help="Path to params file, see src/model/configs"
     )
+    parser.add_argument(
+        "--training-samples",
+        help="Number of training samples, overrides value in file specified by --params-path",
+        required=False,
+    )
+    parser.add_argument(
+        "--test-samples",
+        help="Number of test samples, overrides value in file specified by --params-path",
+        required=False,
+    )
+    parser.add_argument(
+        "--label-bands",
+        help="Which label bands to use in training. Space separated list of integers.",
+        required=False,
+        nargs="+",
+    )
     args = parser.parse_args()
 
     with open(args.params_path) as f:
         params = yaml.safe_load(f)
+
+    # Override yaml params with cl ones
+    params.update(vars(args))
 
     if params["use_hvd"]:
         import horovod.torch as hvd
