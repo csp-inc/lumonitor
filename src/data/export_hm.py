@@ -18,14 +18,14 @@ OUTPUT_PROJ = 'PROJCS["Albers Conical Equal Area",GEOGCS["NAD83",DATUM["North_Am
 @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
 def convert_file(f: str, output_proj: str) -> None:
     nodata_val = -32768
-    in_ds = gdal.Open(f"/vsigs/lumonitor/{f}")
+    in_ds = gdal.Open(f"/vsigs/{f}")
     big_vals = in_ds.ReadAsArray() * 10000
     np.nan_to_num(big_vals, copy=False, nan=nodata_val)
     out_ds = gdal_array.OpenArray(np.int16(big_vals))
     gdal_array.CopyDatasetInfo(in_ds, out_ds)
     gdal.Warp(
         # Could also copy directly to vsiaz if you want
-        f"data/hm/{f}",
+        f"data/hm/{os.path.basename(f)}",
         out_ds,
         dstSRS=output_proj,
         srcNodata=nodata_val,
@@ -45,38 +45,48 @@ def convert_file(f: str, output_proj: str) -> None:
 
 def export_hm(
     image: ee.Image,
+    scale: int,
     output_prefix: str,
     output_proj: str = OUTPUT_PROJ,
+    run_task: bool = True,
 ) -> None:
     aoi = ee.FeatureCollection("projects/GEE_CSP/thirty-by-thirty/aoi_conus")
 
-    task = ee.batch.Export.image.toCloudStorage(
-        image=image,
-        bucket="lumonitor",
-        fileNamePrefix=output_prefix,
-        region=aoi.geometry(),
-        scale=image.projection().nominalScale(),
-        maxPixels=1e11,
-    )
+    if run_task:
+        task = ee.batch.Export.image.toCloudStorage(
+            image=image,
+            bucket="lumonitor",
+            fileNamePrefix=output_prefix,
+            region=aoi.geometry(),
+            scale=scale,
+            maxPixels=1e12,
+        )
 
-    task.start()
+        task.start()
 
-    while task.active():
-        time.sleep(50)
-        print("sleepy sleepy")
+        while task.active():
+            time.sleep(50)
+            print("sleepy sleepy")
 
     fs = gcsfs.GCSFileSystem(token=os.environ["GOOGLE_APPLICATION_CREDENTIALS"])
     for f in fs.ls("lumonitor"):
         if os.path.basename(f).startswith(output_prefix):
-            convert_file(f, output_proj)
             print(f)
+            convert_file(f, output_proj)
 
 
 if __name__ == "__main__":
 
     image = ee.Image("projects/GEE_CSP/HM/HM_ee_2017_v014_500_30")
     output_prefix = "HM_ee_2017_v014_500_30"
-    export_hm(image, output_prefix, output_proj=OUTPUT_PROJ)
+    run_task = True
+    export_hm(
+        image,
+        image.projection().nominalScale(),
+        output_prefix,
+        output_proj=OUTPUT_PROJ,
+        run_task=run_task,
+    )
 
     # Then i did
     # az storage blob upload-batch --account-name lumonitoreastus2 --account-key $AZURE_STORAGE_ACCESS_KEY --destination-path hm_fixed/ -d hls -s data/hm_fixed --max-connections 10

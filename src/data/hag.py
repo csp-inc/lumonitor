@@ -32,7 +32,7 @@ wood = 0.2
 ones = ee.Image(1)
 
 # Get state-level crop planting dates
-st_dates = pd.read_csv(r"/data/state-planting-dates.csv")
+st_dates = pd.read_csv(r"data/state-planting-dates.csv")
 st_names = st_dates["Location"].tolist()
 
 # Get Plant Hardiness Zones map
@@ -243,4 +243,4 @@ def edge_effect(img: ee.Image) -> ee.Image:
 
 hag_ee = edge_effect(hag)
 
-export_hm(hag_ee, "hag_suraci_2017")
+export_hm.export_hm(hag_ee, scale=30, output_prefix="hag_suraci_2017", run_task=False)
