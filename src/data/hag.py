@@ -124,7 +124,7 @@ for i in range(len(st_names)):
     # Justin: d3 is 2016 and d4 is 2017
     #    d1 = st_dates[st_dates["Location"] == st_names[i]][["st1", "end1"]].values[0]
     #    d2 = st_dates[st_dates["Location"] == st_names[i]][["st2", "end2"]].values[0]
-    #    d3 = st_dates[st_dates["Location"] == st_names[i]][["st3", "end3"]].values[0]
+    # d4 = st_dates[st_dates["Location"] == st_names[i]][["st4", "end4"]].values[0]
     #    d5 = st_dates[st_dates["Location"] == st_names[i]][["st5", "end5"]].values[0]
     #    dateFilter = ee.Filter.Or(
     #        ee.Filter.date(d1[0], d1[1]),
@@ -133,8 +133,8 @@ for i in range(len(st_names)):
     #        ee.Filter.date(d4[0], d4[1]),
     #        ee.Filter.date(d5[0], d5[1]),
     #    )
-    d4 = st_dates[st_dates["Location"] == st_names[i]][["st4", "end4"]].values[0]
-    dateFilter = ee.Filter.date(d4[0], d4[1])
+    d3 = st_dates[st_dates["Location"] == st_names[i]][["st3", "end3"]].values[0]
+    dateFilter = ee.Filter.date(d3[0], d3[1])
 
     viCol = ee.ImageCollection("MODIS/006/MOD13Q1").filter(dateFilter).select("NDVI")
     vi = viCol.map(modisScale)
