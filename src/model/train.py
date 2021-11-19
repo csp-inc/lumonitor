@@ -98,11 +98,14 @@ class Trainer:
         set_seed(self.seed)
 
         if self.label_bands is None:
-            num_label_bands, _ = self._get_raster_specs(self.label_file)
+            self.num_label_bands, _ = self._get_raster_specs(self.label_file)
             self.label_bands = (
-                range(1, num_label_bands + 1) if num_label_bands > 1 else 1
+                range(1, self.num_label_bands + 1) if self.num_label_bands > 1 else 1
             )
-        self.num_label_bands = len(self.label_bands)
+        elif isinstance(self.label_bands, list):
+            self.num_label_bands = len(self.label_bands)
+        else:
+            self.num_label_bands = 1
 
         self.net = (
             Unet(self.num_training_bands, self.num_label_bands).float().to(self.dev)
@@ -241,9 +244,6 @@ class Trainer:
             aoi = self.test_aoi
         else:
             aoi = self.training_aoi
-
-        # Scratch that, as it wasn't working w/ all bands (test outupt was nan)
-        # aoi = self.test_aoi
 
         return Dataset(
             num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
@@ -420,8 +420,13 @@ if __name__ == "__main__":
     with open(args.params_path) as f:
         params = yaml.safe_load(f)
 
-    # Override yaml params with cl ones
-    params.update(vars(args))
+    if "num_gpus" in params.keys():
+        params.pop("num_gpus")
+
+    # Override yaml params with cl ones, but remove Nones first
+    dargs = {k: v for k, v in vars(args).items() if v is not None}
+    dargs.pop("params_path")
+    params.update(dargs)
 
     if params["use_hvd"]:
         import horovod.torch as hvd

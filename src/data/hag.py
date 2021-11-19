@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 import export_hm
+from edge_effect import edge_effect
 
 # Initialize ee
 ee.Initialize()
@@ -28,8 +29,6 @@ pasture = 0.4
 rangeland = 0.2
 wood = 0.2
 
-# Matrix of ones
-ones = ee.Image(1)
 
 # Get state-level crop planting dates
 st_dates = pd.read_csv(r"data/state-planting-dates.csv")
@@ -214,33 +213,7 @@ agVI = ee.ImageCollection.fromImages(
 hag = hagTemp.add(agVI).multiply(isAg).clamp(0, 1)
 
 
-def edge_effect(img: ee.Image) -> ee.Image:
-    resolutionOut = 30
-    # Set some constants
-    distance = min(255 * resolutionOut, 10000)
-    halfLife = 500
-    HMeeMax = ee.Image(0)
-
-    seq = np.arange(0.1, 1.05, 0.05)
-    for i in seq:
-        HMt = img.gt(i)
-        # dt: filter out small "salt" patches
-        # JA: keeping this at 90 for now
-        HMt = HMt.focal_mean(90, "circle", "meters")
-        HMt = HMt.gt(0.5)
-
-        # dt: calculate Euc distance away from 1s
-        HMtdistance = HMt.distance(ee.Kernel.euclidean(distance, "meters"), False)
-        HMee = (
-            ee.Image(i)
-            .multiply(ee.Image(0.5).pow(HMtdistance.divide(ee.Image(halfLife))))
-            .unmask(0)
-        )
-        HMeeMax = HMeeMax.max(HMee)
-
-    return ones.subtract(ones.subtract(HMeeMax).multiply(ones.subtract(img)))
-
-
 hag_ee = edge_effect(hag)
 
+# This is 2016 even though it says 2017 sorry!
 export_hm.export_hm(hag_ee, scale=30, output_prefix="hag_suraci_2017", run_task=False)

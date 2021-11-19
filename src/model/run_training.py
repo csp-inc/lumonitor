@@ -5,7 +5,7 @@ import yaml
 from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
 from azureml.core.runconfig import MpiConfiguration
 
-from model.utils import load_azml_env
+from utils import load_azml_env
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--compute-target", help="Which cluster to use", default="gpu-cluster"
     )
-    parser.add_argument("--num_gpus", help="Number of GPUs to use", required=False)
+    # parser.add_argument("--num_gpus", help="Number of GPUs to use", required=False)
 
     # Just be aware that there are args passed on to train.py which will not
     # show up if you view the cl help
@@ -33,6 +33,7 @@ if __name__ == "__main__":
     params.update(vars(args))
 
     node_count = params["num_gpus"] if params["use_hvd"] else 1
+
     distr_config = MpiConfiguration(node_count=node_count)
 
     config = ScriptRunConfig(

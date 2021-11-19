@@ -35,25 +35,30 @@ if __name__ == "__main__":
     if not os.path.exists(model_file):
         download_model_file(args.run_id, model_file)
 
-    distr_config = MpiConfiguration(node_count=20)
-    config = ScriptRunConfig(
-        source_directory="./src",
-        script="model/predict_hvd.py",
-        compute_target="gpu-cluster",
-        distributed_job_config=distr_config,
-        arguments=[
-            "--run_id",
-            args.run_id,
-            "--aoi",
-            "conus.geojson",
-            "--feature_file",
-            "conus_hls_median_2013.vrt",
-        ],
-    )
-
-    config.run_config.environment = load_azml_env()
-    run = experiment.submit(config)
-    run.wait_for_completion()
+    #    distr_config = MpiConfiguration(node_count=20)
+    #    config = ScriptRunConfig(
+    #        source_directory="./src",
+    #        script="model/predict_hvd.py",
+    #        compute_target="gpu-cluster",
+    #        distributed_job_config=distr_config,
+    #        arguments=[
+    #            "--run_id",
+    #            args.run_id,
+    #            "--aoi",
+    #            "conus.geojson",
+    #            "--feature_file",
+    #            "conus_hls_median_2013.vrt",
+    #        ],
+    #    )
+    #
+    #    config.run_config.environment = load_azml_env()
+    # run = experiment.submit(config)
+    # run.wait_for_completion()
+    run = [
+        run
+        for run in experiment.get_runs()
+        if run.get_details()["runId"] == "hm-2016_1637291202_ae89d6b5"
+    ][0]
 
     output_dir = f"data/predictions/{args.output_prefix}_{args.run_id}"
     os.makedirs(output_dir, exist_ok=True)
@@ -72,7 +77,7 @@ if __name__ == "__main__":
 
     mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction_conus.tif")
     gdal.Translate(
-        mosaic_file, vrt_file, creation_options=["COMPRESS=LZW", "PREDICTOR=2"]
+        mosaic_file, vrt_file, creationOptions=["COMPRESS=LZW", "PREDICTOR=2"]
     )
 
     # Clean up to save space

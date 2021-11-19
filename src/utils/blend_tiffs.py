@@ -8,38 +8,37 @@ import xarray as xr
 import rioxarray
 
 
-def blend(a, b):
-    print(a.shape)
-    return lighten_only(a, b, opacity=1)
+def blend(da: xr.DataArray) -> xr.DataArray:
+    fg = da[0:4, :, :]
+    bg = da[4:8, :, :]
+    blended = np.moveaxis(
+        lighten_only(
+            np.moveaxis(fg.to_numpy(), 0, -1),
+            np.moveaxis(bg.to_numpy(), 0, -1),
+            opacity=1,
+        ),
+        -1,
+        0,
+    )
+    return xr.DataArray(blended, dims=fg.dims, coords=fg.coords)
 
 
 if __name__ == "__main__":
     client = Client()
     print(client.dashboard_link)
 
-    open_args = dict(chunks={"x": 4096, "y": 4096}, lock=False)
-    trans = (
-        rioxarray.open_rasterio("data/predictions/htrans_rgb.tif", **open_args).astype(
-            "float"
-        )
-        #        .transpose("x", "y", "band")
-    )
-    urban = (
-        rioxarray.open_rasterio("data/predictions/hurban_rgb.tif", **open_args).astype(
-            "float"
-        )
-        #        .transpose("x", "y", "band")
-    )
+    open_args = dict(chunks={"x": 8192, "y": 8192}, lock=False)
+    trans = rioxarray.open_rasterio(
+        "data/predictions/htrans_rgb.tif", **open_args
+    ).astype("float")
+    urban = rioxarray.open_rasterio(
+        "data/predictions/hurban_rgb.tif", **open_args
+    ).astype("float")
 
-    xr.apply_ufunc(
-        blend,
-        trans,
-        urban,
-        dask="parallelized",
-        input_core_dims=[["band"], ["band"]],
-        exclude_dims=set(("band",)),
-        dask_gufunc_kwargs=dict(allow_rechunk=True),
-    ).rio.to_raster(
+    # da = xr.concat([trans, urban], dim="band").chunk(dict(band=8, x=2048, y=2048))
+
+    # da.map_blocks(blend, template=trans)
+    np.maximum(trans, urban).rio.to_raster(
         "data/trans_urban.tif",
         compress="LZW",
         predictor=2,
