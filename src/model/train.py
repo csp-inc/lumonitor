@@ -30,7 +30,10 @@ from utils.chippers import nlcd_chipper, hm_chipper
 
 
 def worker_init_fn(worker_id):
-    np.random.seed(np.random.get_state()[1][0] + worker_id)
+    """Function to initialize each dataloader worker"""
+    seed = np.random.get_state()[1][0] + worker_id
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 def set_seed(seed: int) -> None:
@@ -308,12 +311,6 @@ class Trainer:
 
             outputs = self.net(inputs.float())
             loss = self.loss_function(outputs.squeeze(), labels.squeeze().float())
-            #            if np.isnan(loss.detach().cpu()):
-            #                print(f"inputs {hvd.rank()}", inputs.float().detach().cpu().numpy())
-            #                print(
-            #                    f"outputs {hvd.rank()}", outputs.squeeze(1).detach().cpu().numpy()
-            #                )
-            #                print(f"labels {hvd.rank()}", labels.squeeze().detach().cpu().numpy())
 
             if training:
                 loss.backward()

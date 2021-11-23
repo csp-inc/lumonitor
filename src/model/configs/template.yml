@@ -43,6 +43,8 @@ batch_size: 8
 # (See src/train.py)
 chipper: nlcd_chipper
 
+label_file:
+training_file:
 
 # whether to use horovod for training or not
 use_hvd: false

@@ -1,55 +1,92 @@
 import argparse
 import os
-import time
 
-from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
+from azureml.core import Environment, Experiment, Run, ScriptRunConfig, Workspace
+from azureml.core.runconfig import MpiConfiguration
+from osgeo import gdal
 
-import yaml
+from utils import load_azml_env
+
+
+def download_model_file(run_id: str, local_file: str) -> None:
+    """Download the model.pt file for the corresponding run_id to the local
+    directory. Then it is uploaded to Azure when run. Could be other ways
+    to acomplish this (copy directly from run to run perhaps)"""
+    ws = Workspace.from_config()
+    experiment = Experiment(workspace=ws, name="hm-2016")
+    run = Run(experiment, run_id)
+    azml_file = "outputs/model.pt"
+    run.download_file(azml_file, local_file)
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-r", "--run-id")
+    parser.add_argument("-p", "--output-prefix")
+    parser.add_argument("-f", "--feature_file", default="conus_hls_median_2013.vrt")
+    parser.add_argument("-e", "--experiment", default="hm-2016")
+    args = parser.parse_args()
 
     ws = Workspace.from_config()
-    experiment = Experiment(
-        workspace=ws,
-        name="lumonitor-conus-impervious-2016"
+    experiment = Experiment(workspace=ws, name=args.experiment)
+
+    model_file = f"data/azml/{args.run_id}.pt"
+    if not os.path.exists(model_file):
+        download_model_file(args.run_id, model_file)
+
+    distr_config = MpiConfiguration(node_count=20)
+    config = ScriptRunConfig(
+        source_directory="./src",
+        script="model/predict_hvd.py",
+        compute_target="gpu-cluster",
+        distributed_job_config=distr_config,
+        arguments=[
+            "--run_id",
+            args.run_id,
+            "--aoi",
+            "conus.geojson",
+            "--feature_file",
+            args.feature_file,
+        ],
     )
 
-    env = Environment("lumonitor")
-    env.docker.enabled = True
-    env.docker.base_image = "cspincregistry.azurecr.io/lumonitor-azml:latest"
-    env.python.user_managed_dependencies = True
-    env.docker.base_image_registry.address = "cspincregistry.azurecr.io"
-    env.docker.base_image_registry.username = os.environ['AZURE_REGISTRY_USERNAME']
-    env.docker.base_image_registry.password = os.environ['AZURE_REGISTRY_PASSWORD']
+    config.run_config.environment = load_azml_env()
+    display_name = f"{args.output_prefix} {args.run_id}"
 
-    env.environment_variables = dict(
-        AZURE_STORAGE_ACCOUNT=os.environ['AZURE_STORAGE_ACCOUNT'],
-        AZURE_STORAGE_ACCESS_KEY=os.environ['AZURE_STORAGE_ACCESS_KEY']
+    existing_runs = [
+        run for run in experiment.get_runs() if run.display_name == display_name
+    ]
+    if len(existing_runs) == 0:
+        print("no runs")
+        run = experiment.submit(config)
+        run.display_name = display_name
+        run.wait_for_completion()
+    else:
+        print("run exists")
+        run = existing_runs[0]
+
+    output_dir = f"data/predictions/{args.output_prefix}_{args.run_id}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    local_files = []
+    for file in run.get_file_names():
+        if file.startswith("outputs/prediction_conus"):
+            local_file = os.path.join(output_dir, os.path.basename(file))
+            if not os.path.exists(local_file):
+                print(local_file)
+                run.download_file(file, output_dir)
+            local_files.append(local_file)
+
+    vrt_file = os.path.join(output_dir, f"{args.output_prefix}_{args.run_id}.vrt")
+    gdal.BuildVRT(vrt_file, local_files)
+
+    mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction_conus.tif")
+    gdal.Translate(
+        mosaic_file, vrt_file, creationOptions=["COMPRESS=LZW", "PREDICTOR=2"]
     )
 
-    run_ids = []
-    files = os.listdir('data/azml/slices')
-
-    model_id = 'lumonitor-conus-impervious-2016_1620952711_8aebb74b'
-    # No dir on this
-    feature_file = 'conus_hls_median_2013.vrt'
-    with open('data/slice_ids_2013.txt', 'a+') as dst:
-        for file in files:
-            print(file)
-            aoi = os.path.join('model/data/azml/slices/', file)
-            config = ScriptRunConfig(
-                source_directory='./src',
-                script='model/predict.py',
-                compute_target='gpu-cluster',
-                arguments=[
-                    '--model_id', model_id,
-                    '--aoi', aoi,
-                    '--feature_file', feature_file
-                ]
-            )
-
-            config.run_config.environment = env
-
-            run = experiment.submit(config)
-            run_id = run.id
-            dst.write('%s\n' % run_id)
+    # Clean up to save space
+    os.remove(model_file)
+    for f in local_files:
+        os.remove(f)
+    os.remove(vrt_file)
