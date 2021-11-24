@@ -37,7 +37,7 @@ if __name__ == "__main__":
     distr_config = MpiConfiguration(node_count=20)
     config = ScriptRunConfig(
         source_directory="./src",
-        script="model/predict_hvd.py",
+        script="model/predict.py",
         compute_target="gpu-cluster",
         distributed_job_config=distr_config,
         arguments=[
