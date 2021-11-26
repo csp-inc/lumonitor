@@ -81,12 +81,24 @@ if __name__ == "__main__":
     gdal.BuildVRT(vrt_file, local_files)
 
     mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction_conus.tif")
-    gdal.Translate(
-        mosaic_file, vrt_file, creationOptions=["COMPRESS=LZW", "PREDICTOR=2"]
+    # If you're in here, change this to warp and crop to conus
+    gdal.Warp(
+        mosaic_file,
+        vrt_file,
+        cutlineDSName="data/azml/conus_projected.gpkg",
+        cropToCutline=True,
+        multithread=True,
+        creationOptions=[
+            "COMPRESS=LZW",
+            "PREDICTOR=2",
+            "BLOCKXSIZE=256",
+            "BLOCKYSIZE=256",
+            "TILED=YES",
+        ],
     )
 
     # Clean up to save space
-    os.remove(model_file)
     for f in local_files:
         os.remove(f)
     os.remove(vrt_file)
+    os.remove(model_file)
