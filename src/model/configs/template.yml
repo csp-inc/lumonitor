@@ -17,9 +17,6 @@ seed: 1337
 
 #### OPTIONAL PARAMS ####
 
-# how many nodes (machines) to train on in parallel
-node_count: 1
-
 # if you want to reduce learning_rate over time include the two configs below
 # ref: torch.optim.lr_scheduler.StepLR
 learning_schedule_gamma: 0.1
@@ -42,3 +39,15 @@ aoi_file: conus.geojson
 # batch size
 batch_size: 8
 
+# function to use to get the training chip from the raw image data
+# (See src/train.py)
+chipper: nlcd_chipper
+
+label_file:
+training_file:
+
+# whether to use horovod for training or not
+use_hvd: false
+
+# number of gpus to use if use_hvd is true
+num_gpus: 1

@@ -1,0 +1,312 @@
+<VRTDataset rasterXSize="161190" rasterYSize="104424">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["Albers Conical Equal Area",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101004,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4269"]],PROJECTION["Albers_Conic_Equal_Area"],PARAMETER["latitude_of_center",23],PARAMETER["longitude_of_center",-96],PARAMETER["standard_parallel_1",29.5],PARAMETER["standard_parallel_2",45.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform> -2.4930450000000000e+06,  3.0000000000000000e+01,  0.0000000000000000e+00,  3.3100050000000000e+06,  0.0000000000000000e+00, -3.0000000000000000e+01</GeoTransform>
+  <VRTRasterBand dataType="Int16" band="1">
+    <NoDataValue>-32768</NoDataValue>
+    <ColorInterp>Gray</ColorInterp>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000000000.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="21759" RasterYSize="26650" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="21759" ySize="26650" />
+      <DstRect xOff="6731.13298746813" yOff="2070.47396462631" xSize="21759" ySize="26650" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000023296.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20521" RasterYSize="25970" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20521" ySize="25970" />
+      <DstRect xOff="23061.0033753301" yOff="6170.31312568978" xSize="20521" ySize="25970" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000046592.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="19193" RasterYSize="25176" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="19193" ySize="25176" />
+      <DstRect xOff="39652.8117085168" yOff="9280.6886614259" xSize="19193" ySize="25176" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000069888.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="17781" RasterYSize="24272" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="17781" ySize="24272" />
+      <DstRect xOff="56434.1731063502" yOff="11388.0309742659" xSize="17781" ySize="24272" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000093184.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="16940" RasterYSize="23364" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="16940" ySize="23364" />
+      <DstRect xOff="73331.8757273" yOff="12483.1463874992" xSize="16940" ySize="23364" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000116480.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="17558" RasterYSize="24125" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="17558" ySize="24125" />
+      <DstRect xOff="89623.7191042694" yOff="11622.0228016815" xSize="17558" ySize="24125" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000139776.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="18981" RasterYSize="25045" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="18981" ySize="25045" />
+      <DstRect xOff="105003.593745394" yOff="9669.54061603847" xSize="18981" ySize="25045" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000163072.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20323" RasterYSize="25855" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20323" ySize="25855" />
+      <DstRect xOff="120287.916388176" yOff="6712.32876780038" xSize="20323" ySize="25855" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000186368.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="21576" RasterYSize="26553" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="21576" ySize="26553" />
+      <DstRect xOff="135410.006303878" yOff="2763.28864917674" xSize="21576" ySize="26553" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000000000-0000209664.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="9984" RasterYSize="23137" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="9984" ySize="23137" />
+      <DstRect xOff="150303.890534508" yOff="1837.63307130293" xSize="9984" ySize="23137" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000000000.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="23308" RasterYSize="27292" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="247.248287244917" yOff="0" xSize="23060.7517127551" ySize="27292" />
+      <DstRect xOff="0" yOff="24212.8966671864" xSize="23060.7517127551" ySize="27292" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000023296.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="22078" RasterYSize="26517" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="22078" ySize="26517" />
+      <DstRect xOff="17574.7723441068" yOff="28720.368264926" xSize="22078" ySize="26517" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000046592.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20752" RasterYSize="25626" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20752" ySize="25626" />
+      <DstRect xOff="35682.6656342629" yOff="32139.9973856931" xSize="20752" ySize="25626" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000069888.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="19334" RasterYSize="24623" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="19334" ySize="24623" />
+      <DstRect xOff="53997.4324971194" yOff="34456.8652550603" xSize="19334" ySize="24623" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000093184.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="18488" RasterYSize="23622" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="18488" ySize="23622" />
+      <DstRect xOff="72439.1713217495" yOff="35660.8641017163" xSize="18488" ySize="23622" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000116480.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="19110" RasterYSize="24459" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="19110" ySize="24459" />
+      <DstRect xOff="90272.2001693946" yOff="34714.1220582528" xSize="19110" ySize="24459" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000139776.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20539" RasterYSize="25479" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20539" ySize="25479" />
+      <DstRect xOff="107181.241084961" yOff="32567.5115081464" xSize="20539" ySize="25479" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000163072.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="21881" RasterYSize="26387" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="21881" ySize="26387" />
+      <DstRect xOff="123985.229606588" yOff="29316.2745959709" xSize="21881" ySize="26387" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000186368.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="23126" RasterYSize="27180" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20579.144822333" ySize="27180" />
+      <DstRect xOff="140610.855177667" yOff="24974.595453511" xSize="20579.144822333" ySize="27180" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000023296-0000209664.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="10355" RasterYSize="23460" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="4204.41461653335" ySize="23460" />
+      <DstRect xOff="156985.585383467" yOff="23956.9052313723" xSize="4204.41461653335" ySize="23460" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000000000.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="24780" RasterYSize="27639" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="7205.58590900553" yOff="0" xSize="17574.4140909945" ySize="27639" />
+      <DstRect xOff="0" yOff="46585.6388285987" xSize="17574.4140909945" ySize="27639" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000023296.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="23578" RasterYSize="26763" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="23578" ySize="26763" />
+      <DstRect xOff="12104.2991378686" yOff="51504.9829447564" xSize="23578" ySize="26763" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000046592.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="22274" RasterYSize="25771" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="22274" ySize="25771" />
+      <DstRect xOff="31723.9228105553" yOff="55237.0824222381" xSize="22274" ySize="25771" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000069888.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20871" RasterYSize="24665" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20871" ySize="24665" />
+      <DstRect xOff="51567.6908151733" yOff="57765.6552759865" xSize="20871" ySize="24665" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000093184.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20032" RasterYSize="23572" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20032" ySize="23572" />
+      <DstRect xOff="71549.0309860871" yOff="59079.6701319266" xSize="20032" ySize="23572" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000116480.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="20648" RasterYSize="24486" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="20648" ySize="24486" />
+      <DstRect xOff="90927.4265581911" yOff="58046.4190509066" xSize="20648" ySize="24486" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000139776.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="22064" RasterYSize="25608" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="22064" ySize="25608" />
+      <DstRect xOff="109381.539719897" yOff="55703.660865887" xSize="22064" ySize="25608" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000163072.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="23385" RasterYSize="26618" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="23385" ySize="26618" />
+      <DstRect xOff="127721.001271536" yOff="52155.3405210254" xSize="23385" ySize="26618" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000046592-0000186368.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="24603" RasterYSize="27512" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="15324.1981330393" ySize="27512" />
+      <DstRect xOff="145865.801866961" yOff="47416.9382303896" xSize="15324.1981330393" ySize="27512" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000000000.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="25914" RasterYSize="26894" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="13809.988488046" yOff="0" xSize="12104.011511954" ySize="26894" />
+      <DstRect xOff="0" yOff="68894.1208898784" xSize="12104.011511954" ySize="26894" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000023296.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="24812" RasterYSize="25903" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="24812" ySize="25903" />
+      <DstRect xOff="6912.08092200261" yOff="74224.1545237704" xSize="24812" ySize="25903" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000046592.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="23601" RasterYSize="24799" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="23601" ySize="24799" />
+      <DstRect xOff="27966.5409852053" yOff="78267.8268651038" xSize="23601" ySize="24799" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000069888.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="22288" RasterYSize="23588" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="22288" ySize="23416.5033663272" />
+      <DstRect xOff="49261.5376643886" yOff="81007.4966336728" xSize="22288" ySize="23416.5033663272" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000093184.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="21496" RasterYSize="22400" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="21496" ySize="21992.7884945436" />
+      <DstRect xOff="70704.1675362062" yOff="82431.2115054564" xSize="21496" ySize="21992.7884945436" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000116480.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="22077" RasterYSize="23392" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="22077" ySize="23112.30013757" />
+      <DstRect xOff="91580.7709732425" yOff="81311.69986243" xSize="22077" ySize="23112.30013757" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000139776.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="23406" RasterYSize="24620" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="23406" ySize="24620" />
+      <DstRect xOff="111575.514738421" yOff="78773.3558782892" xSize="23406" ySize="24620" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000163072.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="24633" RasterYSize="25741" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="24633" ySize="25741" />
+      <DstRect xOff="131446.042867744" yOff="74928.8069476951" xSize="24633" ySize="25741" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/hag_suraci/hag_suraci_20170000069888-0000186368.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="25753" RasterYSize="26749" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="10084.3449623678" ySize="26749" />
+      <DstRect xOff="151105.655037632" yOff="69794.8209967944" xSize="10084.3449623678" ySize="26749" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>

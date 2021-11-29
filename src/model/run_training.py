@@ -1,45 +1,49 @@
 import argparse
 import os
-
-from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
-from azureml.core.runconfig import PyTorchConfiguration
-
 import yaml
 
+from azureml.core import Environment, Experiment, ScriptRunConfig, Workspace
+from azureml.core.runconfig import MpiConfiguration
+
+from utils import load_azml_env
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--name", help="Name of experiment")
+    parser.add_argument(
+        "--params-path", help="Path to params file, see src/model/configs"
+    )
+    parser.add_argument(
+        "--compute-target", help="Which cluster to use", default="gpu-cluster"
+    )
+    # parser.add_argument("--num_gpus", help="Number of GPUs to use", required=False)
+
+    # Just be aware that there are args passed on to train.py which will not
+    # show up if you view the cl help
+    args, args_to_pass_on = parser.parse_known_args()
 
     ws = Workspace.from_config()
-    experiment = Experiment(
-        workspace=ws,
-        name="lumonitor-conus-impervious-2016"
-    )
+    experiment = Experiment(workspace=ws, name=args.name)
 
-    distr_config = PyTorchConfiguration(node_count=15)
+    # Since for the training script directories are relative to the training script
+    params_path = os.path.join("src", args.params_path)
+    with open(params_path) as f:
+        params = yaml.safe_load(f)
+
+    params.update(vars(args))
+
+    node_count = params["num_gpus"] if params["use_hvd"] else 1
+
+    distr_config = MpiConfiguration(node_count=node_count)
 
     config = ScriptRunConfig(
-        source_directory='./src',
-        script='model/train.py',
-        compute_target='gpu-cluster',
+        source_directory="./src",
+        script="model/train.py",
+        compute_target=args.compute_target,
         distributed_job_config=distr_config,
-        arguments=[
-            '--params-path',
-            'model/configs/conus-impervious-2016.yml'
-        ]
+        arguments=["--params-path", args.params_path] + args_to_pass_on,
     )
 
-    env = Environment("lumonitor")
-    env.docker.enabled = True
-    env.docker.base_image = "cspincregistry.azurecr.io/lumonitor-azml:latest"
-    env.python.user_managed_dependencies = True
-    env.docker.base_image_registry.address = "cspincregistry.azurecr.io"
-    env.docker.base_image_registry.username = os.environ['AZURE_REGISTRY_USERNAME']
-    env.docker.base_image_registry.password = os.environ['AZURE_REGISTRY_PASSWORD']
-
-    env.environment_variables = dict(
-        AZURE_STORAGE_ACCOUNT=os.environ['AZURE_STORAGE_ACCOUNT'],
-        AZURE_STORAGE_ACCESS_KEY=os.environ['AZURE_STORAGE_ACCESS_KEY']
-    )
-
-    config.run_config.environment = env
+    config.run_config.environment = load_azml_env()
 
     run = experiment.submit(config)

@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
 
 SRC_TIF=$1
-LAYER_NAME=$2
+LAYER_NAME=$(echo $(basename $SRC_TIF) | sed 's/\(.*[0-9]\).*$/\1/')
 
 CONTAINER=tiles
-LOCAL_OUTPUT_DIR=data/tiles/
-TARGET=$LOCAL_OUTPUT_DIR$LAYER_NAME/$LAYER_NAME
+# I think this will work, but untested -10/24
+LOCAL_OUTPUT_DIR=data/tiles/$LAYER_NAME
+TARGET=$LOCAL_OUTPUT_DIR/$LAYER_NAME
 echo $TARGET
 
 MIN_ZOOM=0
 MAX_ZOOM=10
 
-gdal2tiles.py --processes=8 -r cubic -z $MIN_ZOOM-$MAX_ZOOM $SRC_TIF $TARGET
-
+gdal2tiles.py -z $MIN_ZOOM-$MAX_ZOOM $SRC_TIF $TARGET
+#vips dzsave ../data/output/ag_2013_rgb.tif --layout google --suffix .png --tile-size 256 --background "0, 0, 0, 0" test3
 # copy the whole directory so subdirs are maintained.
 # Has possible side effects but couldn't think of another way
-# Well here's 1: make a nested self-named directory.
-# Ok maybe tomorrow.
-# az storage blob upload-batch -d $CONTAINER -s $LOCAL_OUTPUT_DIR
+#az storage blob upload-batch -d $CONTAINER -s $LOCAL_OUTPUT_DIR --pattern *.png
