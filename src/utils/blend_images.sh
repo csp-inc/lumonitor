@@ -8,7 +8,7 @@ IMG_A=$1
 IMG_B=$2
 OUTPUT_IMG=$3
 
-gdal_calc.py --calc="maximum(A,B)" --calc="maximum(C,D)" --calc="maximum(E,F)" --calc="maximum(G,H)" -A $IMG_A --A_band=1 -B $IMG_B --B_band=1 -C $IMG_A --C_band=2 -D $IMG_B --D_band=2 -E $IMG_A --E_band=3 -F $IMG_B --F_band=3 -G $IMG_A --G_band=4 -H $IMG_B --H_band=4 --outfile=$OUTPUT_IMG --co=COMPRESS=LZW --co=PREDICTOR=2 --co=BIGTIFF=YES --overwrite
+gdal_calc.py --calc="maximum(A,B)" --calc="maximum(C,D)" --calc="maximum(E,F)" --calc="maximum(G,H)" -A $IMG_A --A_band=1 -B $IMG_B --B_band=1 -C $IMG_A --C_band=2 -D $IMG_B --D_band=2 -E $IMG_A --E_band=3 -F $IMG_B --F_band=3 -G $IMG_A --G_band=4 -H $IMG_B --H_band=4 --outfile=$OUTPUT_IMG --co=COMPRESS=LZW --co=PREDICTOR=2 --co=BIGTIFF=YES --co=BLOCKXSIZE=256 --co=BLOCKYSIZE=256 --co=TILED=YES --co=INTERLEAVE=BAND --overwrite --type=Byte
 
 # Gdal >= 3.3 can use –NoDataValue=none above but
 gdal_edit.py $OUTPUT_IMG -unsetnodata

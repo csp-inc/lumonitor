@@ -26,7 +26,6 @@ def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
 
     OUTPUT_CHIP_SIZE = 70
 
-    #    number = re.sub('^.*_(.*)\..*$', '\\1', j)
     file_id = os.path.splitext(os.path.basename(aoi_file))[0]
     output_file = f"outputs/prediction_{file_id}_{hvd.rank()}.tif"
 
@@ -34,7 +33,9 @@ def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
     pds = Dataset(feature_path, aoi=aoi, mode="predict", chip_from_raw_chip=hm_chipper)
 
     print("num chips", pds.num_chips)
-    sampler = DistributedSampler(pds, num_replicas=hvd.size(), rank=hvd.rank())
+    sampler = DistributedSampler(
+        pds, num_replicas=hvd.size(), rank=hvd.rank(), shuffle=False
+    )
     loader = DataLoader(pds, batch_size=10, num_workers=6, sampler=sampler)
 
     dev = get_device()

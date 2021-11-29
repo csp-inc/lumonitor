@@ -4,6 +4,7 @@ import os
 from azureml.core import Environment, Experiment, Run, ScriptRunConfig, Workspace
 from azureml.core.runconfig import MpiConfiguration
 from osgeo import gdal
+import rasterio as rio
 
 from utils import load_azml_env
 
@@ -77,22 +78,42 @@ if __name__ == "__main__":
                 run.download_file(file, output_dir)
             local_files.append(local_file)
 
+    template = os.path.join("data/azml", args.feature_file)
+    with rio.open(template) as t:
+        bounds = list(t.bounds)
+        xres = t.transform[0]
+        yres = t.transform[5]
+
     vrt_file = os.path.join(output_dir, f"{args.output_prefix}_{args.run_id}.vrt")
-    gdal.BuildVRT(vrt_file, local_files)
+    gdal.BuildVRT(vrt_file, local_files, outputBounds=bounds)
 
     mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction_conus.tif")
-    # If you're in here, change this to warp and crop to conus
-    gdal.Warp(
+
+    #    gdal.Warp(
+    #        mosaic_file,
+    #        vrt_file,
+    #        cutlineDSName="data/azml/conus_projected.gpkg",
+    #        outputBounds=bounds,
+    #        xRes=xres,
+    #        yRes=yres,
+    #        cropToCutline=True,
+    #        multithread=True,
+    #        creationOptions=[
+    #            "COMPRESS=LZW",
+    #            "PREDICTOR=2",
+    #            "BLOCKXSIZE=256",
+    #            "BLOCKYSIZE=256",
+    #            "TILED=YES",
+    #        ],
+    #    )
+    gdal.Translate(
         mosaic_file,
         vrt_file,
-        cutlineDSName="data/azml/conus_projected.gpkg",
-        cropToCutline=True,
-        multithread=True,
         creationOptions=[
             "COMPRESS=LZW",
             "PREDICTOR=2",
-            "BLOCKXSIZE=256",
-            "BLOCKYSIZE=256",
+            "BLOCKXSIZE=128",
+            "BLOCKYSIZE=128",
             "TILED=YES",
         ],
     )
