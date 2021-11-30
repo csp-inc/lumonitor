@@ -210,9 +210,7 @@ class MosaicDataset(Dataset):
     def _get_img_chip(self, window: Window):
         with rio.open(self.feature_file) as img_ds:
             img_chip = (
-                self._read_chip(
-                    img_ds, {"indexes": range(1, 8), "window": window, "masked": True}
-                ).filled(0)
+                self._read_chip(img_ds, {"window": window, "masked": True}).filled(0)
                 * img_ds.scales[0]
             )
             # A couple leaps here ^^^^^

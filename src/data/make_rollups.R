@@ -22,11 +22,13 @@ states$area_km2 <- units::set_units(st_area(states), "km^2")
 
 stats <- exact_extract(input_st, states, fun = "mean", append_cols = "STATEFP") %>%
   right_join(states) %>%
-  mutate(stats, across(starts_with('mean'), list(area_km2=function(x) x * area_km), .names='{substr({.col},6,nchar({.col}))}_{.fn}') %>%
+  mutate(across(starts_with("mean"), list(area_km2 = function(x) {
+    (x / 100) * area_km
+  }), .names = "{substr({.col},6,nchar({.col}))}_{.fn}")) %>%
   st_as_sf() %>%
   st_transform("EPSG:4326")
 
 # conver mean.ag_2013 to ag_2013_mean
-names(stats) = sub('^mean.(.*)$', '\\1_mean', names(stats))
+names(stats) <- sub("^mean.(.*)$", "\\1_mean", names(stats))
 
 write_sf(stats, "data/summary_stats.geojson")

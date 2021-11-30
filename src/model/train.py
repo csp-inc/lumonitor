@@ -83,6 +83,9 @@ class Trainer:
     # AOI within which to pull training data
     training_aoi_file: str = "conus.geojson"
 
+    # Contains areas to do test predictions for at each epoch
+    swatch_file: str = "swatches.gpkg"
+
     def __post_init__(self):
         self.run = Run.get_context()
         offline = self.run._run_id.startswith("OfflineRun")
@@ -147,8 +150,7 @@ class Trainer:
         self._epoch = None
         self.log_df = DataFrame(columns=["epoch", "loss", "test_loss", "lr"])
 
-        swatch_file = os.path.join(path, "swatches.gpkg")
-        self.swatches = gpd.read_file(swatch_file)
+        self.swatches = gpd.read_file(os.path.join(path, self.swatch_file))
 
         _optimizer = optim.SGD(
             self.net.parameters(), lr=self.learning_rate, momentum=self.momentum
