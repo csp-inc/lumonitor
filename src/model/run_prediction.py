@@ -22,10 +22,11 @@ def download_model_file(run_id: str, local_file: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-r", "--run-id")
-    parser.add_argument("-p", "--output-prefix")
+    parser.add_argument("-a", "--aoi_file", default="conus.geojson")
     parser.add_argument("-f", "--feature_file", default="conus_hls_median_2013.vrt")
     parser.add_argument("-e", "--experiment", default="hm-2016")
+    parser.add_argument("-p", "--output-prefix")
+    parser.add_argument("-r", "--run-id")
     args = parser.parse_args()
 
     ws = Workspace.from_config()
@@ -45,7 +46,7 @@ if __name__ == "__main__":
             "--run_id",
             args.run_id,
             "--aoi",
-            "conus.geojson",
+            args.aoi_file,
             "--feature_file",
             args.feature_file,
         ],
@@ -71,7 +72,7 @@ if __name__ == "__main__":
 
     local_files = []
     for file in run.get_file_names():
-        if file.startswith("outputs/prediction_conus"):
+        if file.startswith("outputs/prediction"):
             local_file = os.path.join(output_dir, os.path.basename(file))
             if not os.path.exists(local_file):
                 print(local_file)
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     vrt_file = os.path.join(output_dir, f"{args.output_prefix}_{args.run_id}.vrt")
     gdal.BuildVRT(vrt_file, local_files, outputBounds=bounds)
 
-    mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction_conus.tif")
+    mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction.tif")
 
     #    gdal.Warp(
     #        mosaic_file,
@@ -112,8 +113,8 @@ if __name__ == "__main__":
         creationOptions=[
             "COMPRESS=LZW",
             "PREDICTOR=2",
-            "BLOCKXSIZE=128",
-            "BLOCKYSIZE=128",
+            "BLOCKXSIZE=256",
+            "BLOCKYSIZE=256",
             "TILED=YES",
         ],
     )

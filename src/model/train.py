@@ -1,5 +1,7 @@
 import argparse
 from dataclasses import dataclass
+from enum import Enum
+from math import floor, ceil
 import os
 import random
 from typing import Callable, List, Optional
@@ -10,14 +12,14 @@ import geopandas as gpd
 import numpy as np
 from numpy.ma import masked_array
 from matplotlib.colors import LinearSegmentedColormap
-from pandas import DataFrame
+from pandas import concat, DataFrame
 from PIL import Image
 import rasterio as rio
 from rasterio.mask import mask
 from rasterio.merge import merge
 from shapely.geometry import box
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 import torch.nn as nn
 import torch.optim as optim
 
@@ -33,7 +35,7 @@ def worker_init_fn(worker_id):
     """Function to initialize each dataloader worker"""
     seed = np.random.get_state()[1][0] + worker_id
     np.random.seed(seed)
-    random.seed(seed)
+    # random.seed(seed)
 
 
 def set_seed(seed: int) -> None:
@@ -51,6 +53,7 @@ def set_seed(seed: int) -> None:
 class Trainer:
     epochs: int  # number of epochs
     training_samples: int  # number of training samples
+    validation_samples: int  # number of validation samples
     test_samples: int  # number of test samples
     use_hvd: bool  # whether to use horovod multiprocessing or not
     batch_size: int = 8
@@ -75,6 +78,7 @@ class Trainer:
     # Number of workers each dataloader uses to read data
     num_workers: int = 6
     seed: int = 1337  # Random seed
+    validation_aoi_file: str = "conus.geojson"
     test_aoi_file: str = "conus.geojson"  # AOI within which to pull test data
 
     # Source of the training data
@@ -83,15 +87,28 @@ class Trainer:
     # AOI within which to pull training data
     training_aoi_file: str = "conus.geojson"
 
+    initial_training_aoi_file: str = "conus.geojson"
+
     # Contains areas to do test predictions for at each epoch
     swatch_file: str = "swatches.gpkg"
+
+    # What type of mixing of the validation and training aoi areas to use in training
+    # 'STRAIGHT' - Training for training and validation for validation
+    # 'FIRST10TRAINING' - Use training for the first 10 epochs only
+    # 'SPLIT' - Create a dataset for each and concatenate
+    aoi_mixing: str = "STRAIGHT"
+    # If aoi_mixing is "SPLIT", what fraction of samples should be in the
+    # training set?
+    training_aoi_fraction: float = 0.5
 
     def __post_init__(self):
         self.run = Run.get_context()
         offline = self.run._run_id.startswith("OfflineRun")
         path = "data/azml" if offline else "model/data/azml"
         self.training_aoi = self._load_aoi(path, self.training_aoi_file)
+        self.validation_aoi = self._load_aoi(path, self.validation_aoi_file)
         self.test_aoi = self._load_aoi(path, self.test_aoi_file)
+        self.initial_training_aoi = self._load_aoi(path, self.initial_training_aoi_file)
         self.num_training_bands, self.res = self._get_raster_specs(self.training_file)
 
         if self.use_hvd:
@@ -124,7 +141,8 @@ class Trainer:
             "output_chip_size": self.output_chip_size,
             "label_file": self.label_file,
             "label_bands": self.label_bands,
-            "chip_from_raw_chip": self.chipper,
+            "label_chip_from_raw_chip": self.chipper,
+            "buffer_aoi": False,
         }
         self.dataloader_kwargs = {
             "num_workers": self.num_workers,
@@ -133,22 +151,48 @@ class Trainer:
             "worker_init_fn": worker_init_fn,
         }
 
-        self.test_loader = self._get_loader(
-            Dataset(
-                num_training_chips=self.test_samples,
-                aoi=self.test_aoi,
-                **self.dataset_kwargs,
-            ),
+        self.validation_dataset = Dataset(
+            num_training_chips=self.test_samples,
+            aoi=self.validation_aoi,
+            **self.dataset_kwargs,
+        )
+
+        self.validation_loader = self._get_loader(
+            self.validation_dataset,
             shuffle=False,
         )
+
+        self.test_aoi = self._clip_ds_chips_from_aoi(
+            self.test_aoi, self.validation_dataset
+        )
+        print("test done")
+        self.test_aoi.to_file("./outputs/test_aoi.gpkg")
+        self.test_dataset = Dataset(
+            num_training_chips=self.test_samples,
+            aoi=self.test_aoi,
+            **self.dataset_kwargs,
+        )
+        self.test_loader = self._get_loader(
+            self.test_dataset,
+            shuffle=False,
+        )
+
+        self.training_aoi = self._clip_ds_chips_from_aoi(
+            self.test_aoi, self.test_dataset
+        )
+        print("training_done")
+        self.training_aoi.to_file("./outputs/training_aoi.gpkg")
 
         self.loss_function = self.loss_function()
 
         self._loss = None
+        self._validation_loss = None
         self._test_loss = None
         self._lr = None
         self._epoch = None
-        self.log_df = DataFrame(columns=["epoch", "loss", "test_loss", "lr"])
+        self.log_df = DataFrame(
+            columns=["epoch", "loss", "validation_loss", "test_loss", "lr"]
+        )
 
         self.swatches = gpd.read_file(os.path.join(path, self.swatch_file))
 
@@ -164,6 +208,7 @@ class Trainer:
             self.optimizer, lr_lambda=self._get_lr_lambda
         )
 
+    # Various accessors which log when set
     @property
     def loss(self):
         return self._loss
@@ -172,8 +217,19 @@ class Trainer:
     def loss(self, value):
         self._loss = value
         if self._is_root:
-            print("Loss: %.4f" % value)
+            print("Loss: %.6f" % value)
             self.run.log("Training Loss", value)
+
+    @property
+    def validation_loss(self):
+        return self._validation_loss
+
+    @validation_loss.setter
+    def validation_loss(self, value):
+        self._validation_loss = value
+        if self._is_root:
+            print("Validation loss: %.6f" % value)
+            self.run.log("Validation Loss", value)
 
     @property
     def test_loss(self):
@@ -183,7 +239,7 @@ class Trainer:
     def test_loss(self, value):
         self._test_loss = value
         if self._is_root:
-            print("Test loss: %.4f" % value)
+            print("Test loss: %.6f" % value)
             self.run.log("Test Loss", value)
 
     @property
@@ -207,14 +263,18 @@ class Trainer:
     def lr(self, value):
         self._lr = value
         if self._is_root:
-            print("LR: %.4f" % value)
+            print("LR: %.6f" % value)
             self.run.log("lr", value)
 
     def _write_log(self, output_csv: str = "./outputs/log.csv") -> None:
-        """Log current epoch, training and test loss, and learning rate to
+        """Log current epoch, training and validation loss, and learning rate to
         a csv file"""
         row = dict(
-            epoch=self.epoch, loss=self.loss, test_loss=self.test_loss, lr=self.lr
+            epoch=self.epoch,
+            loss=self.loss,
+            validation_loss=self.validation_loss,
+            test_loss=self.test_loss,
+            lr=self.lr,
         )
         self.log_df = self.log_df.append(row, ignore_index=True)
         self.log_df.to_csv(output_csv, index=False)
@@ -227,6 +287,19 @@ class Trainer:
             aoi_file = os.path.join(path, aoi_file)
             return gpd.read_file(aoi_file)
         return None
+
+    def _clip_ds_chips_from_aoi(
+        self, aoi: gpd.GeoDataFrame, ds: Dataset
+    ) -> gpd.GeoDataFrame:
+        # Possible this could go in dataset code?
+        chip_gpdfs = [
+            ds._get_gpdf_from_window(
+                ds._get_window(i, ds.aoi_transform), ds.aoi_transform
+            )
+            for i in range(len(ds))
+        ]
+        chip_gpdf = gpd.GeoDataFrame(concat(chip_gpdfs))
+        return gpd.overlay(aoi.to_crs(chip_gpdf.crs), chip_gpdf, how="difference")
 
     def _get_raster_specs(self, raster_file: str) -> tuple:
         with rio.open(raster_file) as src:
@@ -243,11 +316,32 @@ class Trainer:
         return self.net.forward(test_chip).shape[2]
 
     def _get_training_ds(self) -> Dataset:
-        """Modify the search area so samples are heavily focused on urban areas
-        in early epochs"""
-        if self.epoch > 10:
-            aoi = self.test_aoi
-        else:
+        if self.aoi_mixing == "SPLIT":
+            if self.epoch < 0:
+                aoi = self.initial_training_aoi
+            else:
+                num_training_chips = ceil(
+                    self.training_samples
+                    * self.training_aoi_fraction
+                    * (self.epoch / self.epochs)
+                )
+                training_ds = Dataset(
+                    num_training_chips=num_training_chips,
+                    aoi=self.training_aoi,
+                    buffer_aoi=False,
+                    **self.dataset_kwargs,
+                )
+                validation_ds = Dataset(
+                    num_training_chips=self.training_samples - num_training_chips,
+                    aoi=self.validation_aoi,
+                    **self.dataset_kwargs,
+                )
+                return ConcatDataset((validation_ds, training_ds))
+        elif self.aoi_mixing == "FIRST10TRAINING":
+            # Modify the search area so samples are heavily focused on e.g.
+            # urban areas in early epochs
+            aoi = self.training_aoi if self.epoch < 10 else self.validation_aoi
+        elif self.aoi_mixing == "STRAIGHT":
             aoi = self.training_aoi
 
         return Dataset(
@@ -288,16 +382,29 @@ class Trainer:
             self.loss = self._step(loader) / self.training_samples
 
             with torch.no_grad():
-                test_running_loss = self._step(loader=self.test_loader, training=False)
-                self._write_swatches()
+                validation_running_loss = self._step(
+                    loader=self.validation_loader, training=False
+                )
+                if not self.epoch % 10:
+                    self._write_swatches()
 
-            self.test_loss = test_running_loss / self.test_samples
+            self.validation_loss = validation_running_loss / self.validation_samples
+            #            if self.epoch == 0:
+            #                self.lr = 0.0001 * hvd.size()
+            #            else:
             self.lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step()
 
             if self._is_root:
                 self._write_log()
-                torch.save(self.net.state_dict(), "./outputs/model.pt")
+
+        torch.save(self.net.state_dict(), "./outputs/model.pt")
+        with torch.no_grad():
+            self.test_loss = (
+                self._step(loader=self.test_loader, training=False) / self.test_samples
+            )
+            if self._is_root:
+                self._write_log()
 
     def _step(self, loader: DataLoader, training: bool = True) -> float:
         running_loss = 0.0
@@ -404,8 +511,8 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--test-samples",
-        help="Number of test samples, overrides value in file specified by --params-path",
+        "--val-samples",
+        help="Number of validation samples, overrides value in file specified by --params-path",
         required=False,
     )
     parser.add_argument(

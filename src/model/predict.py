@@ -26,11 +26,10 @@ def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
 
     OUTPUT_CHIP_SIZE = 70
 
-    file_id = os.path.splitext(os.path.basename(aoi_file))[0]
-    output_file = f"outputs/prediction_{file_id}_{hvd.rank()}.tif"
+    output_file = f"outputs/prediction_{hvd.rank()}.tif"
 
     feature_path = os.path.join(path, feature_file)
-    pds = Dataset(feature_path, aoi=aoi, mode="predict", chip_from_raw_chip=hm_chipper)
+    pds = Dataset(feature_path, aoi=aoi, mode="predict")
 
     print("num chips", pds.num_chips)
     sampler = DistributedSampler(
@@ -40,7 +39,10 @@ def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
 
     dev = get_device()
 
-    model = Unet(7)
+    with rio.open(feature_path) as src:
+        num_bands = src.count
+
+    model = Unet(num_bands)
 
     model_path = os.path.join(path, f"{run_id}.pt")
 
