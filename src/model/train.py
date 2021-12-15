@@ -20,6 +20,7 @@ from rasterio.merge import merge
 from shapely.geometry import box
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
+from torch.nn.utils import clip_grad_value_
 import torch.nn as nn
 import torch.optim as optim
 
@@ -165,8 +166,6 @@ class Trainer:
         self.test_aoi = self._clip_ds_chips_from_aoi(
             self.test_aoi, self.validation_dataset
         )
-        print("test done")
-        self.test_aoi.to_file("./outputs/test_aoi.gpkg")
         self.test_dataset = Dataset(
             num_training_chips=self.test_samples,
             aoi=self.test_aoi,
@@ -180,8 +179,6 @@ class Trainer:
         self.training_aoi = self._clip_ds_chips_from_aoi(
             self.test_aoi, self.test_dataset
         )
-        print("training_done")
-        self.training_aoi.to_file("./outputs/training_aoi.gpkg")
 
         self.loss_function = self.loss_function()
 
@@ -328,7 +325,6 @@ class Trainer:
                 training_ds = Dataset(
                     num_training_chips=num_training_chips,
                     aoi=self.training_aoi,
-                    buffer_aoi=False,
                     **self.dataset_kwargs,
                 )
                 validation_ds = Dataset(
@@ -377,7 +373,7 @@ class Trainer:
 
             # Reset this at each epoch so samples change
             ds = self._get_training_ds()
-            loader = self._get_loader(ds, shuffle=True)
+            loader = self._get_loader(ds)
 
             self.loss = self._step(loader) / self.training_samples
 
@@ -385,7 +381,7 @@ class Trainer:
                 validation_running_loss = self._step(
                     loader=self.validation_loader, training=False
                 )
-                if not self.epoch % 10:
+                if not self.epoch % 10 or self.epoch < 5:
                     self._write_swatches()
 
             self.validation_loss = validation_running_loss / self.validation_samples
@@ -423,6 +419,7 @@ class Trainer:
 
             if training:
                 loss.backward()
+                clip_grad_value_(self.net.parameters(), clip_value=0.05)
                 self.optimizer.step()
             running_loss += loss.item() * self.batch_size
 
@@ -440,7 +437,7 @@ class Trainer:
         for i, _ in self.swatches.iterrows():
             swatch = self.swatches.loc[[i]]
             swatch_kwargs = self.dataset_kwargs.copy()
-            swatch_kwargs.update({"aoi": swatch, "mode": "predict"})
+            swatch_kwargs.update({"aoi": swatch, "mode": "predict", "buffer_aoi": True})
             ds = Dataset(**swatch_kwargs)
             dl = self._get_loader(ds, batch_size=self.batch_size)
             with rio.open(self.label_file) as src:
@@ -454,6 +451,7 @@ class Trainer:
                     "height": out_array.shape[1],
                     "width": out_array.shape[2],
                     "transform": transform,
+                    "compress": "LZW",
                 }
             )
 
