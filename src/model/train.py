@@ -349,7 +349,11 @@ class Trainer:
                 validation_running_loss = self._step(
                     loader=validation_loader, training=False
                 )
-                if not self.epoch % 10 or self.epoch < 5:
+                if (
+                    not self.epoch % 10
+                    or self.epoch < 5
+                    or self.epoch == self.epochs + 1
+                ):
                     self._write_swatches()
 
             self.validation_loss = validation_running_loss / self.validation_samples
@@ -444,6 +448,7 @@ class Trainer:
             for _, (ds_idxes, data) in enumerate(dl):
                 output_tensor = self.net(data.to(self.dev).float())
                 output_np = output_tensor.detach().cpu()  # .numpy()
+                print("Shape ", output_np.shape)
                 for j, idx_tensor in enumerate(ds_idxes):
                     if len(output_np.shape) > 3:
                         prediction = output_np[j, :, 221:291, 221:291]

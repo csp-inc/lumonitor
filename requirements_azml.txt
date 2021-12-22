@@ -92,6 +92,7 @@ cligj==0.7.2
     #   rasterio
 colorama==0.4.4
     # via knack
+
 contextlib2==21.6.0
     # via azureml-core
 cryptography==3.4.8
@@ -109,6 +110,7 @@ docker==5.0.3
     # via azureml-core
 fiona==1.8.20
     # via geopandas
+
 fonttools==4.28.5
     # via matplotlib
 geopandas==0.10.2
@@ -153,6 +155,8 @@ msrestazure==0.6.4
     # via
     #   azure-graphrbac
     #   azure-mgmt-authorization
+    #   azure-mgmt-resource
+    #   azure-mgmt-storage
     #   azureml-core
 munch==2.5.0
     # via fiona
@@ -243,6 +247,8 @@ requests-oauthlib==1.3.0
     # via msrest
 secretstorage==3.3.1
     # via azureml-core
+setuptools-scm==6.3.2
+    # via matplotlib
 shapely==1.8.0
     # via
     #   -r requirements_azml.in
