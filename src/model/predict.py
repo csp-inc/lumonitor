@@ -17,7 +17,7 @@ from utils import get_device, get_output_specs
 from utils.chippers import hm_chipper
 
 
-def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
+def predict(aoi_file: str, feature_file: str, model_file: str) -> None:
     run = Run.get_context()
     offline = run._run_id.startswith("OfflineRun")
     path = "data/azml" if offline else "model/data/azml"
@@ -44,7 +44,7 @@ def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
 
     model = Unet(num_bands)
 
-    model_path = os.path.join(path, f"{run_id}.pt")
+    model_path = os.path.join(path, model_file)
 
     model.load_state_dict(torch.load(model_path, map_location=torch.device(dev)))
     model.half().to(dev)
@@ -96,9 +96,9 @@ def predict(run_id: str, aoi_file: str, feature_file: str) -> None:
 if __name__ == "__main__":
     hvd.init()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run_id", help="Stem of the model file")
-    parser.add_argument("--aoi_file")
-    parser.add_argument("--feature_file", help="Stem of the feature file")
+    parser.add_argument("--aoi-file")
+    parser.add_argument("--feature-file", help="Stem of the feature file")
+    parser.add_argument("--model-file")
     args = parser.parse_args()
 
-    predict(args.run_id, args.aoi_file, args.feature_file)
+    predict(args.aoi_file, args.feature_file, args.model_file)

@@ -4,9 +4,9 @@ geopandas
 numpy
 matplotlib
 Pillow
-pygeos --no-binary pygeos
+pygeos
 rasterio
-shapely --no-binary shapely
+shapely
 tenacity
 torch
 pyyaml
