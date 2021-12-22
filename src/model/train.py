@@ -24,8 +24,8 @@ from torch.nn.utils import clip_grad_value_
 import torch.nn as nn
 import torch.optim as optim
 
-from datasets.MosaicDataset import MosaicDataset as Dataset
-from models.Unet_padded import Unet
+from MosaicDataset import MosaicDataset as Dataset
+from Unet_padded import Unet
 from utils import get_device
 
 # For now this, but fix later
