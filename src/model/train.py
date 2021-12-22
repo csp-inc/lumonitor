@@ -19,7 +19,7 @@ from rasterio.mask import mask
 from rasterio.merge import merge
 from shapely.geometry import box
 import torch
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader, Subset
 from torch.nn.utils import clip_grad_value_
 import torch.nn as nn
 import torch.optim as optim
@@ -53,8 +53,7 @@ def set_seed(seed: int) -> None:
 @dataclass
 class Trainer:
     epochs: int  # number of epochs
-    training_samples: int  # number of training samples
-    validation_samples: int  # number of validation samples
+    cv_samples: int  # number of training samples (training + validation)
     test_samples: int  # number of test samples
     use_hvd: bool  # whether to use horovod multiprocessing or not
     batch_size: int = 8
@@ -79,8 +78,6 @@ class Trainer:
     # Number of workers each dataloader uses to read data
     num_workers: int = 6
     seed: int = 1337  # Random seed
-    validation_aoi_file: str = "conus.geojson"
-    test_aoi_file: str = "conus.geojson"  # AOI within which to pull test data
 
     # Source of the training data
     training_file: str = "/vsiaz/hls/cog/conus_hls_median_2016.vrt"
@@ -88,10 +85,10 @@ class Trainer:
     # AOI within which to pull training data
     training_aoi_file: str = "conus.geojson"
 
-    initial_training_aoi_file: str = "conus.geojson"
-
     # Contains areas to do test predictions for at each epoch
     swatch_file: str = "swatches.gpkg"
+
+    train_split: float = 0.8
 
     # What type of mixing of the validation and training aoi areas to use in training
     # 'STRAIGHT' - Training for training and validation for validation
@@ -106,10 +103,7 @@ class Trainer:
         self.run = Run.get_context()
         offline = self.run._run_id.startswith("OfflineRun")
         path = "data/azml" if offline else "model/data/azml"
-        self.training_aoi = self._load_aoi(path, self.training_aoi_file)
-        self.validation_aoi = self._load_aoi(path, self.validation_aoi_file)
-        self.test_aoi = self._load_aoi(path, self.test_aoi_file)
-        self.initial_training_aoi = self._load_aoi(path, self.initial_training_aoi_file)
+        self.aoi = self._load_aoi(path, self.training_aoi_file)
         self.num_training_bands, self.res = self._get_raster_specs(self.training_file)
 
         if self.use_hvd:
@@ -152,23 +146,12 @@ class Trainer:
             "worker_init_fn": worker_init_fn,
         }
 
-        self.validation_dataset = Dataset(
-            num_training_chips=self.test_samples,
-            aoi=self.validation_aoi,
-            **self.dataset_kwargs,
-        )
+        self.training_samples = floor(self.cv_samples * self.train_split)
+        self.validation_samples = self.cv_samples - self.training_samples
 
-        self.validation_loader = self._get_loader(
-            self.validation_dataset,
-            shuffle=False,
-        )
-
-        self.test_aoi = self._clip_ds_chips_from_aoi(
-            self.test_aoi, self.validation_dataset
-        )
         self.test_dataset = Dataset(
             num_training_chips=self.test_samples,
-            aoi=self.test_aoi,
+            aoi=self.aoi,
             **self.dataset_kwargs,
         )
         self.test_loader = self._get_loader(
@@ -176,9 +159,7 @@ class Trainer:
             shuffle=False,
         )
 
-        self.training_aoi = self._clip_ds_chips_from_aoi(
-            self.test_aoi, self.test_dataset
-        )
+        self.training_aoi = self._clip_ds_chips_from_aoi(self.aoi, self.test_dataset)
 
         self.loss_function = self.loss_function()
 
@@ -200,6 +181,13 @@ class Trainer:
         self.optimizer = (
             hvd.DistributedOptimizer(_optimizer) if self.use_hvd else _optimizer
         )
+
+        #        self.scheduler = optim.lr_scheduler.OneCycleLR(
+        #            optimizer=self.optimizer,
+        #            max_lr=self.learning_rate,
+        #            epochs=self.epochs,
+        #            steps_per_epoch=self.training_samples // self.batch_size,
+        #        )
 
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer, lr_lambda=self._get_lr_lambda
@@ -313,35 +301,10 @@ class Trainer:
         return self.net.forward(test_chip).shape[2]
 
     def _get_training_ds(self) -> Dataset:
-        if self.aoi_mixing == "SPLIT":
-            if self.epoch < 0:
-                aoi = self.initial_training_aoi
-            else:
-                num_training_chips = ceil(
-                    self.training_samples
-                    * self.training_aoi_fraction
-                    * (self.epoch / self.epochs)
-                )
-                training_ds = Dataset(
-                    num_training_chips=num_training_chips,
-                    aoi=self.training_aoi,
-                    **self.dataset_kwargs,
-                )
-                validation_ds = Dataset(
-                    num_training_chips=self.training_samples - num_training_chips,
-                    aoi=self.validation_aoi,
-                    **self.dataset_kwargs,
-                )
-                return ConcatDataset((validation_ds, training_ds))
-        elif self.aoi_mixing == "FIRST10TRAINING":
-            # Modify the search area so samples are heavily focused on e.g.
-            # urban areas in early epochs
-            aoi = self.training_aoi if self.epoch < 10 else self.validation_aoi
-        elif self.aoi_mixing == "STRAIGHT":
-            aoi = self.training_aoi
-
         return Dataset(
-            num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
+            num_training_chips=self.cv_samples,
+            aoi=self.aoi,
+            **self.dataset_kwargs,
         )
 
     def _get_loader(self, ds: Dataset, **kwargs) -> DataLoader:
@@ -373,13 +336,18 @@ class Trainer:
 
             # Reset this at each epoch so samples change
             ds = self._get_training_ds()
-            loader = self._get_loader(ds)
 
-            self.loss = self._step(loader) / self.training_samples
+            train_ds = Subset(ds, range(self.training_samples))
+            train_loader = self._get_loader(train_ds)
+
+            validation_ds = Subset(ds, range(self.training_samples, self.cv_samples))
+            validation_loader = self._get_loader(validation_ds)
+
+            self.loss = self._step(train_loader) / self.training_samples
 
             with torch.no_grad():
                 validation_running_loss = self._step(
-                    loader=self.validation_loader, training=False
+                    loader=validation_loader, training=False
                 )
                 if not self.epoch % 10 or self.epoch < 5:
                     self._write_swatches()
@@ -391,6 +359,8 @@ class Trainer:
             self.lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step()
 
+            if self.epoch != 0 and not self.epoch % 12:
+                torch.save(self.net.state_dict(), f"./outputs/model_{self.epoch}.pt")
             if self._is_root:
                 self._write_log()
 
@@ -419,6 +389,17 @@ class Trainer:
 
             if training:
                 loss.backward()
+                #                total_norm = 0
+                #                parameters = [
+                #                    p
+                #                    for p in self.net.parameters()
+                #                    if p.grad is not None and p.requires_grad
+                #                ]
+                #                for p in parameters:
+                #                    param_norm = p.grad.detach().data.norm(2)
+                #                    total_norm += param_norm.item() ** 2
+                #                total_norm = total_norm ** 0.5
+                #                 print("Norm: ", total_norm)
                 clip_grad_value_(self.net.parameters(), clip_value=0.05)
                 self.optimizer.step()
             running_loss += loss.item() * self.batch_size
@@ -452,10 +433,14 @@ class Trainer:
                     "width": out_array.shape[2],
                     "transform": transform,
                     "compress": "LZW",
+                    "count": self.num_label_bands,
                 }
             )
 
-            swatch_np = torch.ones(out_array.shape) * -32768
+            swatch_np = (
+                torch.ones((kwargs["count"], kwargs["height"], kwargs["width"]))
+                * -32768
+            )
             for _, (ds_idxes, data) in enumerate(dl):
                 output_tensor = self.net(data.to(self.dev).float())
                 output_np = output_tensor.detach().cpu()  # .numpy()
@@ -474,9 +459,14 @@ class Trainer:
                         window.col_off : window.col_off + window.width,
                     ] = prediction
 
-            all_swatches = hvd.allgather_object(swatch_np)
+            if self.use_hvd:
+                all_swatches = hvd.allgather_object(swatch_np)
             if self._is_root:
-                all_swatches_np = np.maximum.reduce([l.numpy() for l in all_swatches])
+                all_swatches_np = (
+                    np.maximum.reduce([l.numpy() for l in all_swatches])
+                    if self.use_hvd
+                    else swatch_np.numpy()
+                )
                 output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
                 with rio.open(output_file, "w", **kwargs) as dst:
                     dst.write(all_swatches_np.astype(np.float32))
@@ -485,13 +475,20 @@ class Trainer:
                 )
 
     def _write_swatch_png(self, data: np.ndarray, swatch_idx: int, epoch: int) -> None:
-        ramp = [
+        urban_ramp = [
             (0, "#010101"),
             (1 / 3.0, "#ff0101"),
             (2 / 3.0, "#ffbb01"),
             (1, "#ffff01"),
         ]
-        cm = LinearSegmentedColormap.from_list("urban", ramp)
+
+        trans_ramp = [
+            (0, "#000000"),
+            (0.35, "#72a7e0"),
+            (0.49, "#b4d1dc"),
+            (1, "#ebf3da"),
+        ]
+        cm = LinearSegmentedColormap.from_list("urban", trans_ramp)
         output_png = f"outputs/swatch_{swatch_idx}_{epoch}.png"
         # Save the first band (could do rgb if you wanted I think)
         rgb = Image.fromarray(np.uint8(cm(data[0, :, :]) * 255))

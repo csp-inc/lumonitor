@@ -1,0 +1,12 @@
+affine
+azureml-core
+geopandas
+numpy
+matplotlib
+Pillow
+pygeos
+rasterio
+shapely
+tenacity
+torch
+pyyaml

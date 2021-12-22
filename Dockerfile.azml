@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi3.1.2-cuda10.1-cudnn7-ubuntu18.04:20201112.v1
+FROM mcr.microsoft.com/azureml/openmpi4.1.0-cuda11.1-cudnn8-ubuntu20.04
 
 ARG requirements_file
 
@@ -8,6 +8,6 @@ RUN apt-get -qqy update \
   && apt-get install -qqy python3-pip libspatialindex-dev git libgeos-dev python-numpy cython cython3 \
   && python3 -m pip install -r requirements.txt
 
-RUN pip install horovod==0.21.3
+RUN pip install horovod
 
 CMD /bin/bash

@@ -1,0 +1,15 @@
+epochs: 48
+cv_samples: 5120
+#cv_samples: 2560
+test_samples: 512
+learning_rate: 0.025
+learning_schedule_gamma: 0.99
+loss_function: nn.MSELoss
+seed: 1337
+batch_size: 8
+num_workers: 6
+label_file: '/vsiaz/hls/hm_fixed/HM_ee_2017_v014_500_30.vrt'
+chipper: hm_chipper
+use_hvd: false
+num_gpus: 6
+label_bands: [4]
