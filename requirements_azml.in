@@ -1,7 +1,10 @@
-# This is to _run_ the stuff that's running on azure ml
 affine
 azureml-core
-GDAL==3.2.1
+geopandas
+numpy
+matplotlib
+Pillow
+pygeos --no-binary pygeos
 rasterio
 shapely --no-binary shapely
 tenacity

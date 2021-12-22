@@ -7,10 +7,10 @@ def conv_block(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
         nn.Conv2d(in_channels, out_channels, 3, padding=1),
         nn.BatchNorm2d(out_channels),
-        nn.SELU(inplace=True),
+        nn.ELU(inplace=True),
         nn.Conv2d(out_channels, out_channels, 3, padding=1),
         nn.BatchNorm2d(out_channels),
-        nn.SELU(inplace=True),
+        nn.ELU(inplace=True),
     )
 
 
@@ -23,7 +23,7 @@ def decoder_block(in_channels: int, out_channels: int) -> nn.Sequential:
 def norm_relu(in_channels: int, out_channels: int) -> nn.Sequential:
     return nn.Sequential(
         nn.BatchNorm2d(in_channels),
-        nn.SELU(inplace=True),
+        nn.ELU(inplace=True),
         conv_block(in_channels, out_channels),
     )
 

@@ -20,7 +20,7 @@ from rasterio.merge import merge
 from shapely.geometry import box
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
-from torch.nn.utils import clip_grad_value_
+from torch.nn.utils import clip_grad_value_, clip_grad_norm_
 import torch.nn as nn
 import torch.optim as optim
 
@@ -313,35 +313,10 @@ class Trainer:
         return self.net.forward(test_chip).shape[2]
 
     def _get_training_ds(self) -> Dataset:
-        if self.aoi_mixing == "SPLIT":
-            if self.epoch < 0:
-                aoi = self.initial_training_aoi
-            else:
-                num_training_chips = ceil(
-                    self.training_samples
-                    * self.training_aoi_fraction
-                    * (self.epoch / self.epochs)
-                )
-                training_ds = Dataset(
-                    num_training_chips=num_training_chips,
-                    aoi=self.training_aoi,
-                    **self.dataset_kwargs,
-                )
-                validation_ds = Dataset(
-                    num_training_chips=self.training_samples - num_training_chips,
-                    aoi=self.validation_aoi,
-                    **self.dataset_kwargs,
-                )
-                return ConcatDataset((validation_ds, training_ds))
-        elif self.aoi_mixing == "FIRST10TRAINING":
-            # Modify the search area so samples are heavily focused on e.g.
-            # urban areas in early epochs
-            aoi = self.training_aoi if self.epoch < 10 else self.validation_aoi
-        elif self.aoi_mixing == "STRAIGHT":
-            aoi = self.training_aoi
-
         return Dataset(
-            num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
+            num_training_chips=self.training_samples,
+            aoi=self.aoi,
+            **self.dataset_kwargs,
         )
 
     def _get_loader(self, ds: Dataset, **kwargs) -> DataLoader:
@@ -381,7 +356,11 @@ class Trainer:
                 validation_running_loss = self._step(
                     loader=self.validation_loader, training=False
                 )
-                if not self.epoch % 10 or self.epoch < 5:
+                if (
+                    not self.epoch % 10
+                    or self.epoch < 5
+                    or self.epoch == self.epochs + 1
+                ):
                     self._write_swatches()
 
             self.validation_loss = validation_running_loss / self.validation_samples
@@ -419,7 +398,7 @@ class Trainer:
 
             if training:
                 loss.backward()
-                clip_grad_value_(self.net.parameters(), clip_value=0.05)
+                clip_grad_norm_(self.net.parameters(), 1)
                 self.optimizer.step()
             running_loss += loss.item() * self.batch_size
 
@@ -452,13 +431,19 @@ class Trainer:
                     "width": out_array.shape[2],
                     "transform": transform,
                     "compress": "LZW",
+                    "count": len(self.label_bands),
                 }
             )
 
-            swatch_np = torch.ones(out_array.shape) * -32768
+            swatch_np = (
+                # hw or wh????
+                torch.ones((kwargs["count"], kwargs["height"], kwargs["width"]))
+                * -32768
+            )
             for _, (ds_idxes, data) in enumerate(dl):
                 output_tensor = self.net(data.to(self.dev).float())
                 output_np = output_tensor.detach().cpu()  # .numpy()
+                print("Shape ", output_np.shape)
                 for j, idx_tensor in enumerate(ds_idxes):
                     if len(output_np.shape) > 3:
                         prediction = output_np[j, :, 221:291, 221:291]

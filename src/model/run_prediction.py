@@ -27,6 +27,8 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--experiment", default="hm-2016")
     parser.add_argument("-p", "--output-prefix")
     parser.add_argument("-r", "--run-id")
+    parser.add_argument("-c", "--compute-target", default="gpu-cluster")
+    parser.add_argument("-g", "--num-gpus", default=20)
     args = parser.parse_args()
 
     ws = Workspace.from_config()
@@ -36,11 +38,11 @@ if __name__ == "__main__":
     if not os.path.exists(model_file):
         download_model_file(args.run_id, model_file)
 
-    distr_config = MpiConfiguration(node_count=20)
+    distr_config = MpiConfiguration(node_count=args.num_gpus)
     config = ScriptRunConfig(
         source_directory="./src",
         script="model/predict.py",
-        compute_target="gpu-cluster",
+        compute_target=args.compute_target,
         distributed_job_config=distr_config,
         arguments=[
             "--run_id",
