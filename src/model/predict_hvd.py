@@ -6,6 +6,7 @@ from azureml.core import Run
 import geopandas as gpd
 from numpy import round
 import rasterio as rio
+import horovod.torch as hvd
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
@@ -25,14 +26,16 @@ def predict(aoi_file: str, feature_file: str, model_file: str) -> None:
 
     OUTPUT_CHIP_SIZE = 70
 
-    file_id = os.path.splitext(os.path.basename(aoi_file))[0]
-    output_file = f"outputs/prediction_{file_id}.tif"
+    output_file = f"outputs/prediction_{hvd.rank()}.tif"
 
     feature_path = os.path.join(path, feature_file)
     pds = Dataset(feature_path, aoi=aoi, mode="predict")
 
     print("num chips", pds.num_chips)
-    loader = DataLoader(pds, batch_size=10, num_workers=5)
+    sampler = DistributedSampler(
+        pds, num_replicas=hvd.size(), rank=hvd.rank(), shuffle=False
+    )
+    loader = DataLoader(pds, batch_size=10, num_workers=6, sampler=sampler)
 
     dev = get_device()
 
@@ -78,10 +81,7 @@ def predict(aoi_file: str, feature_file: str, model_file: str) -> None:
             for j, idx_tensor in enumerate(ds_idxes):
                 idx = idx_tensor.detach().cpu().numpy()
                 if j % 1000 == 0:
-                    p_done = idx / pds.num_chips
-                    print(f"Proportion done: {idx / pds.num_chips}")
-                    run.log("Proportion done", p_done)
-
+                    print(idx)
                 if len(output_np.shape) > 3:
                     prediction = output_np[j, 0:1, 221:291, 221:291]
                 else:
@@ -94,6 +94,7 @@ def predict(aoi_file: str, feature_file: str, model_file: str) -> None:
 
 
 if __name__ == "__main__":
+    hvd.init()
     parser = argparse.ArgumentParser()
     parser.add_argument("--aoi-file")
     parser.add_argument("--feature-file", help="Stem of the feature file")

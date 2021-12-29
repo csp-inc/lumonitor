@@ -1,5 +1,7 @@
 import argparse
 from dataclasses import dataclass
+from enum import Enum
+from math import floor, ceil
 import os
 import random
 from typing import Callable, List, Optional
@@ -10,19 +12,20 @@ import geopandas as gpd
 import numpy as np
 from numpy.ma import masked_array
 from matplotlib.colors import LinearSegmentedColormap
-from pandas import DataFrame
+from pandas import concat, DataFrame
 from PIL import Image
 import rasterio as rio
 from rasterio.mask import mask
 from rasterio.merge import merge
 from shapely.geometry import box
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
+from torch.nn.utils import clip_grad_value_
 import torch.nn as nn
 import torch.optim as optim
 
-from datasets.MosaicDataset import MosaicDataset as Dataset
-from models.Unet_padded import Unet
+from MosaicDataset import MosaicDataset as Dataset
+from Unet_padded import Unet
 from utils import get_device
 
 # For now this, but fix later
@@ -33,7 +36,7 @@ def worker_init_fn(worker_id):
     """Function to initialize each dataloader worker"""
     seed = np.random.get_state()[1][0] + worker_id
     np.random.seed(seed)
-    random.seed(seed)
+    # random.seed(seed)
 
 
 def set_seed(seed: int) -> None:
@@ -50,7 +53,7 @@ def set_seed(seed: int) -> None:
 @dataclass
 class Trainer:
     epochs: int  # number of epochs
-    training_samples: int  # number of training samples
+    cv_samples: int  # number of training samples (training + validation)
     test_samples: int  # number of test samples
     use_hvd: bool  # whether to use horovod multiprocessing or not
     batch_size: int = 8
@@ -75,7 +78,6 @@ class Trainer:
     # Number of workers each dataloader uses to read data
     num_workers: int = 6
     seed: int = 1337  # Random seed
-    test_aoi_file: str = "conus.geojson"  # AOI within which to pull test data
 
     # Source of the training data
     training_file: str = "/vsiaz/hls/cog/conus_hls_median_2016.vrt"
@@ -86,12 +88,22 @@ class Trainer:
     # Contains areas to do test predictions for at each epoch
     swatch_file: str = "swatches.gpkg"
 
+    train_split: float = 0.8
+
+    # What type of mixing of the validation and training aoi areas to use in training
+    # 'STRAIGHT' - Training for training and validation for validation
+    # 'FIRST10TRAINING' - Use training for the first 10 epochs only
+    # 'SPLIT' - Create a dataset for each and concatenate
+    aoi_mixing: str = "STRAIGHT"
+    # If aoi_mixing is "SPLIT", what fraction of samples should be in the
+    # training set?
+    training_aoi_fraction: float = 0.5
+
     def __post_init__(self):
         self.run = Run.get_context()
         offline = self.run._run_id.startswith("OfflineRun")
         path = "data/azml" if offline else "model/data/azml"
-        self.training_aoi = self._load_aoi(path, self.training_aoi_file)
-        self.test_aoi = self._load_aoi(path, self.test_aoi_file)
+        self.aoi = self._load_aoi(path, self.training_aoi_file)
         self.num_training_bands, self.res = self._get_raster_specs(self.training_file)
 
         if self.use_hvd:
@@ -124,7 +136,8 @@ class Trainer:
             "output_chip_size": self.output_chip_size,
             "label_file": self.label_file,
             "label_bands": self.label_bands,
-            "chip_from_raw_chip": self.chipper,
+            "label_chip_from_raw_chip": self.chipper,
+            "buffer_aoi": False,
         }
         self.dataloader_kwargs = {
             "num_workers": self.num_workers,
@@ -133,22 +146,31 @@ class Trainer:
             "worker_init_fn": worker_init_fn,
         }
 
+        self.training_samples = floor(self.cv_samples * self.train_split)
+        self.validation_samples = self.cv_samples - self.training_samples
+
+        self.test_dataset = Dataset(
+            num_training_chips=self.test_samples,
+            aoi=self.aoi,
+            **self.dataset_kwargs,
+        )
         self.test_loader = self._get_loader(
-            Dataset(
-                num_training_chips=self.test_samples,
-                aoi=self.test_aoi,
-                **self.dataset_kwargs,
-            ),
+            self.test_dataset,
             shuffle=False,
         )
+
+        self.training_aoi = self._clip_ds_chips_from_aoi(self.aoi, self.test_dataset)
 
         self.loss_function = self.loss_function()
 
         self._loss = None
+        self._validation_loss = None
         self._test_loss = None
         self._lr = None
         self._epoch = None
-        self.log_df = DataFrame(columns=["epoch", "loss", "test_loss", "lr"])
+        self.log_df = DataFrame(
+            columns=["epoch", "loss", "validation_loss", "test_loss", "lr"]
+        )
 
         self.swatches = gpd.read_file(os.path.join(path, self.swatch_file))
 
@@ -160,10 +182,18 @@ class Trainer:
             hvd.DistributedOptimizer(_optimizer) if self.use_hvd else _optimizer
         )
 
+        #        self.scheduler = optim.lr_scheduler.OneCycleLR(
+        #            optimizer=self.optimizer,
+        #            max_lr=self.learning_rate,
+        #            epochs=self.epochs,
+        #            steps_per_epoch=self.training_samples // self.batch_size,
+        #        )
+
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer, lr_lambda=self._get_lr_lambda
         )
 
+    # Various accessors which log when set
     @property
     def loss(self):
         return self._loss
@@ -172,8 +202,19 @@ class Trainer:
     def loss(self, value):
         self._loss = value
         if self._is_root:
-            print("Loss: %.4f" % value)
+            print("Loss: %.6f" % value)
             self.run.log("Training Loss", value)
+
+    @property
+    def validation_loss(self):
+        return self._validation_loss
+
+    @validation_loss.setter
+    def validation_loss(self, value):
+        self._validation_loss = value
+        if self._is_root:
+            print("Validation loss: %.6f" % value)
+            self.run.log("Validation Loss", value)
 
     @property
     def test_loss(self):
@@ -183,7 +224,7 @@ class Trainer:
     def test_loss(self, value):
         self._test_loss = value
         if self._is_root:
-            print("Test loss: %.4f" % value)
+            print("Test loss: %.6f" % value)
             self.run.log("Test Loss", value)
 
     @property
@@ -207,14 +248,18 @@ class Trainer:
     def lr(self, value):
         self._lr = value
         if self._is_root:
-            print("LR: %.4f" % value)
+            print("LR: %.6f" % value)
             self.run.log("lr", value)
 
     def _write_log(self, output_csv: str = "./outputs/log.csv") -> None:
-        """Log current epoch, training and test loss, and learning rate to
+        """Log current epoch, training and validation loss, and learning rate to
         a csv file"""
         row = dict(
-            epoch=self.epoch, loss=self.loss, test_loss=self.test_loss, lr=self.lr
+            epoch=self.epoch,
+            loss=self.loss,
+            validation_loss=self.validation_loss,
+            test_loss=self.test_loss,
+            lr=self.lr,
         )
         self.log_df = self.log_df.append(row, ignore_index=True)
         self.log_df.to_csv(output_csv, index=False)
@@ -227,6 +272,19 @@ class Trainer:
             aoi_file = os.path.join(path, aoi_file)
             return gpd.read_file(aoi_file)
         return None
+
+    def _clip_ds_chips_from_aoi(
+        self, aoi: gpd.GeoDataFrame, ds: Dataset
+    ) -> gpd.GeoDataFrame:
+        # Possible this could go in dataset code?
+        chip_gpdfs = [
+            ds._get_gpdf_from_window(
+                ds._get_window(i, ds.aoi_transform), ds.aoi_transform
+            )
+            for i in range(len(ds))
+        ]
+        chip_gpdf = gpd.GeoDataFrame(concat(chip_gpdfs))
+        return gpd.overlay(aoi.to_crs(chip_gpdf.crs), chip_gpdf, how="difference")
 
     def _get_raster_specs(self, raster_file: str) -> tuple:
         with rio.open(raster_file) as src:
@@ -243,15 +301,10 @@ class Trainer:
         return self.net.forward(test_chip).shape[2]
 
     def _get_training_ds(self) -> Dataset:
-        """Modify the search area so samples are heavily focused on urban areas
-        in early epochs"""
-        if self.epoch > 10:
-            aoi = self.test_aoi
-        else:
-            aoi = self.training_aoi
-
         return Dataset(
-            num_training_chips=self.training_samples, aoi=aoi, **self.dataset_kwargs
+            num_training_chips=self.cv_samples,
+            aoi=self.aoi,
+            **self.dataset_kwargs,
         )
 
     def _get_loader(self, ds: Dataset, **kwargs) -> DataLoader:
@@ -283,21 +336,45 @@ class Trainer:
 
             # Reset this at each epoch so samples change
             ds = self._get_training_ds()
-            loader = self._get_loader(ds, shuffle=True)
 
-            self.loss = self._step(loader) / self.training_samples
+            train_ds = Subset(ds, range(self.training_samples))
+            train_loader = self._get_loader(train_ds)
+
+            validation_ds = Subset(ds, range(self.training_samples, self.cv_samples))
+            validation_loader = self._get_loader(validation_ds)
+
+            self.loss = self._step(train_loader) / self.training_samples
 
             with torch.no_grad():
-                test_running_loss = self._step(loader=self.test_loader, training=False)
-                self._write_swatches()
+                validation_running_loss = self._step(
+                    loader=validation_loader, training=False
+                )
+                if (
+                    not self.epoch % 10
+                    or self.epoch < 5
+                    or self.epoch == self.epochs + 1
+                ):
+                    self._write_swatches()
 
-            self.test_loss = test_running_loss / self.test_samples
+            self.validation_loss = validation_running_loss / self.validation_samples
+            #            if self.epoch == 0:
+            #                self.lr = 0.0001 * hvd.size()
+            #            else:
             self.lr = self.optimizer.param_groups[0]["lr"]
             self.scheduler.step()
 
+            if self.epoch != 0 and not self.epoch % 12:
+                torch.save(self.net.state_dict(), f"./outputs/model_{self.epoch}.pt")
             if self._is_root:
                 self._write_log()
-                torch.save(self.net.state_dict(), "./outputs/model.pt")
+
+        torch.save(self.net.state_dict(), "./outputs/model.pt")
+        with torch.no_grad():
+            self.test_loss = (
+                self._step(loader=self.test_loader, training=False) / self.test_samples
+            )
+            if self._is_root:
+                self._write_log()
 
     def _step(self, loader: DataLoader, training: bool = True) -> float:
         running_loss = 0.0
@@ -316,6 +393,18 @@ class Trainer:
 
             if training:
                 loss.backward()
+                #                total_norm = 0
+                #                parameters = [
+                #                    p
+                #                    for p in self.net.parameters()
+                #                    if p.grad is not None and p.requires_grad
+                #                ]
+                #                for p in parameters:
+                #                    param_norm = p.grad.detach().data.norm(2)
+                #                    total_norm += param_norm.item() ** 2
+                #                total_norm = total_norm ** 0.5
+                #                 print("Norm: ", total_norm)
+                clip_grad_value_(self.net.parameters(), clip_value=0.05)
                 self.optimizer.step()
             running_loss += loss.item() * self.batch_size
 
@@ -333,7 +422,7 @@ class Trainer:
         for i, _ in self.swatches.iterrows():
             swatch = self.swatches.loc[[i]]
             swatch_kwargs = self.dataset_kwargs.copy()
-            swatch_kwargs.update({"aoi": swatch, "mode": "predict"})
+            swatch_kwargs.update({"aoi": swatch, "mode": "predict", "buffer_aoi": True})
             ds = Dataset(**swatch_kwargs)
             dl = self._get_loader(ds, batch_size=self.batch_size)
             with rio.open(self.label_file) as src:
@@ -347,13 +436,19 @@ class Trainer:
                     "height": out_array.shape[1],
                     "width": out_array.shape[2],
                     "transform": transform,
+                    "compress": "LZW",
+                    "count": self.num_label_bands,
                 }
             )
 
-            swatch_np = torch.ones(out_array.shape) * -32768
+            swatch_np = (
+                torch.ones((kwargs["count"], kwargs["height"], kwargs["width"]))
+                * -32768
+            )
             for _, (ds_idxes, data) in enumerate(dl):
                 output_tensor = self.net(data.to(self.dev).float())
                 output_np = output_tensor.detach().cpu()  # .numpy()
+                print("Shape ", output_np.shape)
                 for j, idx_tensor in enumerate(ds_idxes):
                     if len(output_np.shape) > 3:
                         prediction = output_np[j, :, 221:291, 221:291]
@@ -369,9 +464,14 @@ class Trainer:
                         window.col_off : window.col_off + window.width,
                     ] = prediction
 
-            all_swatches = hvd.allgather_object(swatch_np)
+            if self.use_hvd:
+                all_swatches = hvd.allgather_object(swatch_np)
             if self._is_root:
-                all_swatches_np = np.maximum.reduce([l.numpy() for l in all_swatches])
+                all_swatches_np = (
+                    np.maximum.reduce([l.numpy() for l in all_swatches])
+                    if self.use_hvd
+                    else swatch_np.numpy()
+                )
                 output_file = f"outputs/swatch_{i}_{self.epoch}.tif"
                 with rio.open(output_file, "w", **kwargs) as dst:
                     dst.write(all_swatches_np.astype(np.float32))
@@ -380,13 +480,20 @@ class Trainer:
                 )
 
     def _write_swatch_png(self, data: np.ndarray, swatch_idx: int, epoch: int) -> None:
-        ramp = [
+        urban_ramp = [
             (0, "#010101"),
             (1 / 3.0, "#ff0101"),
             (2 / 3.0, "#ffbb01"),
             (1, "#ffff01"),
         ]
-        cm = LinearSegmentedColormap.from_list("urban", ramp)
+
+        trans_ramp = [
+            (0, "#000000"),
+            (0.35, "#72a7e0"),
+            (0.49, "#b4d1dc"),
+            (1, "#ebf3da"),
+        ]
+        cm = LinearSegmentedColormap.from_list("urban", trans_ramp)
         output_png = f"outputs/swatch_{swatch_idx}_{epoch}.png"
         # Save the first band (could do rgb if you wanted I think)
         rgb = Image.fromarray(np.uint8(cm(data[0, :, :]) * 255))
@@ -404,8 +511,8 @@ if __name__ == "__main__":
         required=False,
     )
     parser.add_argument(
-        "--test-samples",
-        help="Number of test samples, overrides value in file specified by --params-path",
+        "--val-samples",
+        help="Number of validation samples, overrides value in file specified by --params-path",
         required=False,
     )
     parser.add_argument(
