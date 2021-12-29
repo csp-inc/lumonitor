@@ -47,7 +47,7 @@ if __name__ == "__main__":
     distr_config = MpiConfiguration(node_count=args.num_gpus)
     config = ScriptRunConfig(
         source_directory="./src",
-        script="model/predict.py",
+        script="model/predict_hvd.py",
         compute_target=args.compute_target,
         distributed_job_config=distr_config,
         arguments=[
@@ -58,9 +58,10 @@ if __name__ == "__main__":
             "--model-file",
             os.path.basename(model_file),
         ],
+        max_run_duration_seconds=60 * 30,
+        environment=load_azml_env(),
     )
 
-    config.run_config.environment = load_azml_env(img_tag="openmpi4")
     display_name = f"{args.output_prefix} {args.run_id} {args.model_file}"
 
     existing_runs = [
@@ -94,27 +95,10 @@ if __name__ == "__main__":
         yres = t.transform[5]
 
     vrt_file = os.path.join(output_dir, f"{args.output_prefix}_{args.run_id}.vrt")
-    gdal.BuildVRT(vrt_file, local_files, outputBounds=bounds)
+    gdal.BuildVRT(vrt_file, local_files)  # , outputBounds=bounds)
 
     mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction.tif")
 
-    #    gdal.Warp(
-    #        mosaic_file,
-    #        vrt_file,
-    #        cutlineDSName="data/azml/conus_projected.gpkg",
-    #        outputBounds=bounds,
-    #        xRes=xres,
-    #        yRes=yres,
-    #        cropToCutline=True,
-    #        multithread=True,
-    #        creationOptions=[
-    #            "COMPRESS=LZW",
-    #            "PREDICTOR=2",
-    #            "BLOCKXSIZE=256",
-    #            "BLOCKYSIZE=256",
-    #            "TILED=YES",
-    #        ],
-    #    )
     gdal.Translate(
         mosaic_file,
         vrt_file,

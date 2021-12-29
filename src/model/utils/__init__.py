@@ -7,7 +7,7 @@ from azureml.core import Environment
 import rasterio as rio
 import torch
 
-from datasets.MosaicDataset import MosaicDataset as Dataset
+from MosaicDataset import MosaicDataset as Dataset
 
 
 def get_device(use_hvd: bool = True) -> torch.device:
@@ -27,7 +27,6 @@ def get_device(use_hvd: bool = True) -> torch.device:
 
 def load_azml_env(img_tag: str = "latest") -> Environment:
     env = Environment("lumonitor")
-    env.docker.enabled = True
     env.docker.base_image = f"cspincregistry.azurecr.io/lumonitor-azml:{img_tag}"
     env.python.user_managed_dependencies = True
     env.docker.base_image_registry.address = "cspincregistry.azurecr.io"

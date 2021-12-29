@@ -25,13 +25,14 @@ def predict(aoi_file: str, feature_file: str, model_file: str) -> None:
 
     OUTPUT_CHIP_SIZE = 70
 
-    output_file = f"outputs/prediction_{os.path.basename(aoi_file)}.tif"
+    file_id = os.path.splitext(os.path.basename(aoi_file))[0]
+    output_file = f"outputs/prediction_{file_id}.tif"
 
     feature_path = os.path.join(path, feature_file)
     pds = Dataset(feature_path, aoi=aoi, mode="predict")
 
     print("num chips", pds.num_chips)
-    loader = DataLoader(pds, batch_size=10, num_workers=6)
+    loader = DataLoader(pds, batch_size=10, num_workers=5)
 
     dev = get_device()
 
