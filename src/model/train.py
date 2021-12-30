@@ -182,13 +182,6 @@ class Trainer:
             hvd.DistributedOptimizer(_optimizer) if self.use_hvd else _optimizer
         )
 
-        #        self.scheduler = optim.lr_scheduler.OneCycleLR(
-        #            optimizer=self.optimizer,
-        #            max_lr=self.learning_rate,
-        #            epochs=self.epochs,
-        #            steps_per_epoch=self.training_samples // self.batch_size,
-        #        )
-
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(
             self.optimizer, lr_lambda=self._get_lr_lambda
         )
@@ -393,17 +386,6 @@ class Trainer:
 
             if training:
                 loss.backward()
-                #                total_norm = 0
-                #                parameters = [
-                #                    p
-                #                    for p in self.net.parameters()
-                #                    if p.grad is not None and p.requires_grad
-                #                ]
-                #                for p in parameters:
-                #                    param_norm = p.grad.detach().data.norm(2)
-                #                    total_norm += param_norm.item() ** 2
-                #                total_norm = total_norm ** 0.5
-                #                 print("Norm: ", total_norm)
                 clip_grad_value_(self.net.parameters(), clip_value=0.05)
                 self.optimizer.step()
             running_loss += loss.item() * self.batch_size
