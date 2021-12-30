@@ -40,9 +40,9 @@ rgbs: $(RGBS)
 %_rgb.tif:
 	source src/utils/export_rgb.sh $^ $@
 
-%.tiles: %_rgb.tif
+data/%.tiles: data/output/%_rgb.tif
 	source src/utils/make_raster_tiles.sh $^
-	touch data/$@
+	touch $@
 
 # NOt the prettiest, I admit
 $(OUTPUT_DIR)at_2013_blend_rgb.tif: ag_2013_rgb.tif trans_2013_rgb.tif
@@ -72,11 +72,11 @@ $(PREDICTION_DIR)trans_2013_min.tif: $(TRANS_2013) trans_2016_min.tif
 	source src/utils/min_calc.sh $^ $@
 $(OUTPUT_DIR)trans_2013_rgb.tif: trans_2013_min.tif trans_col.txt
 
-$(OUTPUT_DIR)urban_2020_rgb.tif: $(TRANS_2020) urban_col.txt
-$(PREDICTION_DIR)urban_2016_min.tif: $(TRANS_2020) $(TRANS_2016)
+$(OUTPUT_DIR)urban_2020_rgb.tif: $(URBAN_2020) urban_col.txt
+$(PREDICTION_DIR)urban_2016_min.tif: $(URBAN_2020) $(URBAN_2016)
 	source src/utils/min_calc.sh $^ $@
 $(OUTPUT_DIR)urban_2016_rgb.tif: urban_2016_min.tif urban_col.txt
-$(PREDICTION_DIR)urban_2013_min.tif: $(TRANS_2013) urban_2016_min.tif
+$(PREDICTION_DIR)urban_2013_min.tif: $(URBAN_2013) urban_2016_min.tif
 	source src/utils/min_calc.sh $^ $@
 $(OUTPUT_DIR)urban_2013_rgb.tif: urban_2013_min.tif urban_col.txt
 
