@@ -40,9 +40,9 @@ rgbs: $(RGBS)
 %_rgb.tif:
 	source src/utils/export_rgb.sh $^ $@
 
-%.tiles: %_rgb.tif
+data/%.tiles: data/output/%_rgb.tif
 	source src/utils/make_raster_tiles.sh $^
-	touch data/$@
+	touch $@
 
 # NOt the prettiest, I admit
 $(OUTPUT_DIR)at_2013_blend_rgb.tif: ag_2013_rgb.tif trans_2013_rgb.tif

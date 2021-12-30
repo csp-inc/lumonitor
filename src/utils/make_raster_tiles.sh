@@ -15,4 +15,4 @@ MAX_ZOOM=10
 gdal2tiles.py -z $MIN_ZOOM-$MAX_ZOOM $SRC_TIF $TARGET
 # copy the whole directory so subdirs are maintained.
 # Has possible side effects but couldn't think of another way
-#az storage blob upload-batch -d $CONTAINER -s $LOCAL_OUTPUT_DIR --pattern *.png
+az storage blob upload-batch -d $CONTAINER -s $LOCAL_OUTPUT_DIR --account-name=lumonitor --account-key=$AZURE_LUMONITOR_STORAGE_KEY --pattern *.png
