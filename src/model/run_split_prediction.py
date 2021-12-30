@@ -26,7 +26,7 @@ def download_model_file(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--source_dir", default="conus_split_19")
+    parser.add_argument("-s", "--source_dir", default="conus_split_20")
     parser.add_argument("-f", "--feature_file", default="conus_hls_median_2013.vrt")
     parser.add_argument("-e", "--experiment", default="lumonitor-export")
     parser.add_argument("-m", "--model-file", default="model.pt")
@@ -48,12 +48,15 @@ if __name__ == "__main__":
     if not os.path.exists(model_file):
         download_model_file(args.run_id, remote_model_file, model_file, args.experiment)
 
-    split_files = os.listdir(os.path.join("data/azml", args.source_dir))
+    split_files = [
+        f
+        for f in os.listdir(os.path.join("data/azml", args.source_dir))
+        if f.endswith("gpkg")
+    ]
     runs = []
     for file in split_files:
         aoi = os.path.join(args.source_dir, file)
         config = ScriptRunConfig(
-            docker_runtime_config=DockerConfiguration(use_docker=True),
             source_directory="./src",
             script="model/predict.py",
             compute_target=args.compute_target,
@@ -65,20 +68,21 @@ if __name__ == "__main__":
                 "--model-file",
                 os.path.basename(model_file),
             ],
+            environment=load_azml_env(),
+            max_run_duration_seconds=60 * 60 * 12,
         )
 
-        config.run_config.environment = load_azml_env(img_tag="openmpi4")
-        display_name = f"{args.output_prefix} {args.run_id} {args.model_file} {file}"
+        display_name = f"{args.output_prefix} {args.run_id} {file}"
 
         existing_runs = [
             run for run in experiment.get_runs() if run.display_name == display_name
         ]
         if len(existing_runs) == 0:
-            print("no runs")
+            print(f"submitting {display_name}")
             run = experiment.submit(config)
             run.display_name = display_name
         else:
-            print("run exists")
+            print(f"{display_name} exists")
             run = existing_runs[0]
 
         runs.append(run)
@@ -86,11 +90,12 @@ if __name__ == "__main__":
     output_dir = f"data/predictions/{args.output_prefix}_{args.run_id}"
     os.makedirs(output_dir, exist_ok=True)
 
+    local_files = []
+
     for run in runs:
         print(run.display_name)
         while run.get_status() not in ["Completed", "Failed", "Canceled"]:
             time.sleep(60)
-        local_files = []
         for file in run.get_file_names():
             if file.startswith("outputs/prediction"):
                 local_file = os.path.join(output_dir, os.path.basename(file))
@@ -110,15 +115,9 @@ if __name__ == "__main__":
 
     mosaic_file = os.path.join(output_dir, f"{args.output_prefix}_prediction.tif")
 
-    gdal.Warp(
+    gdal.Translate(
         mosaic_file,
         vrt_file,
-        cutlineDSName="data/azml/conus_projected.gpkg",
-        outputBounds=bounds,
-        xRes=xres,
-        yRes=yres,
-        cropToCutline=True,
-        multithread=True,
         creationOptions=[
             "COMPRESS=LZW",
             "PREDICTOR=2",

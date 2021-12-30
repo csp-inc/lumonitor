@@ -13,7 +13,6 @@ MIN_ZOOM=0
 MAX_ZOOM=10
 
 gdal2tiles.py -z $MIN_ZOOM-$MAX_ZOOM $SRC_TIF $TARGET
-#vips dzsave ../data/output/ag_2013_rgb.tif --layout google --suffix .png --tile-size 256 --background "0, 0, 0, 0" test3
 # copy the whole directory so subdirs are maintained.
 # Has possible side effects but couldn't think of another way
-#az storage blob upload-batch -d $CONTAINER -s $LOCAL_OUTPUT_DIR --pattern *.png
+az storage blob upload-batch -d $CONTAINER -s $LOCAL_OUTPUT_DIR --account-name=lumonitor --account-key=$AZURE_LUMONITOR_STORAGE_KEY --pattern *.png

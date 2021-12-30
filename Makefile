@@ -4,82 +4,86 @@ OUTPUT_DIR=data/output/
 VPATH=data/:$(PREDICTION_DIR):$(OUTPUT_DIR)
 
 
-AG_PREFIX=hag_s
-AG_RUNID=hm-2016_1637276166_2d4f1735
-AG_2013=$(PREDICTION_DIR)$(AG_PREFIX)_2013_$(AG_RUNID)/$(AG_PREFIX)_2013_prediction_conus.tif
-AG_2016=$(PREDICTION_DIR)$(AG_PREFIX)_2016_$(AG_RUNID)/$(AG_PREFIX)_2016_prediction_conus.tif
-AG_2020=$(PREDICTION_DIR)$(AG_PREFIX)_2020_$(AG_RUNID)/$(AG_PREFIX)_2020_prediction_conus.tif
+AG_PREFIX=a
+AG_RUNID=hm-2016_1640031699_24788cc5
+AG_2013=$(PREDICTION_DIR)$(AG_PREFIX)_13_$(AG_RUNID)/$(AG_PREFIX)_13_prediction.tif
+AG_2016=$(PREDICTION_DIR)$(AG_PREFIX)_16_$(AG_RUNID)/$(AG_PREFIX)_16_prediction.tif
+AG_2020=$(PREDICTION_DIR)$(AG_PREFIX)_20_$(AG_RUNID)/$(AG_PREFIX)_20_prediction.tif
 
-TRANS_PREFIX=htrans
-TRANS_RUNID=hm-2016_1636478645_6b6a8ce5
-TRANS_2013=$(PREDICTION_DIR)$(TRANS_PREFIX)_2013_$(TRANS_RUNID)/$(TRANS_PREFIX)_2013_prediction_conus.tif
-TRANS_2016=$(PREDICTION_DIR)$(TRANS_PREFIX)_2016_$(TRANS_RUNID)/$(TRANS_PREFIX)_2016_prediction_conus.tif
-TRANS_2020=$(PREDICTION_DIR)$(TRANS_PREFIX)_2020_$(TRANS_RUNID)/$(TRANS_PREFIX)_2020_prediction_conus.tif
+TRANS_PREFIX=t
+TRANS_RUNID=hm-2016_1639946057_b79ecb57
+TRANS_2013=$(PREDICTION_DIR)$(TRANS_PREFIX)_13_$(TRANS_RUNID)/$(TRANS_PREFIX)_13_prediction.tif
+TRANS_2016=$(PREDICTION_DIR)$(TRANS_PREFIX)_16_$(TRANS_RUNID)/$(TRANS_PREFIX)_16_prediction.tif
+TRANS_2020=$(PREDICTION_DIR)$(TRANS_PREFIX)_20_$(TRANS_RUNID)/$(TRANS_PREFIX)_20_prediction.tif
 
-URBAN_PREFIX=hurban_c
-URBAN_RUNID=hm-2016_1637623568_31c2a6cd
-URBAN_2013=$(PREDICTION_DIR)$(URBAN_PREFIX)_2013_$(URBAN_RUNID)/$(URBAN_PREFIX)_2013_prediction_conus.tif
-URBAN_2016=$(PREDICTION_DIR)$(URBAN_PREFIX)_2016_$(URBAN_RUNID)/$(URBAN_PREFIX)_2016_prediction_conus.tif
-URBAN_2020=$(PREDICTION_DIR)$(URBAN_PREFIX)_2020_$(URBAN_RUNID)/$(URBAN_PREFIX)_2020_prediction_conus.tif
+URBAN_PREFIX=u
+URBAN_RUNID=hm-2016_1640024836_f7c93937
+URBAN_2013=$(PREDICTION_DIR)$(URBAN_PREFIX)_13_$(URBAN_RUNID)/$(URBAN_PREFIX)_13_prediction.tif
+URBAN_2016=$(PREDICTION_DIR)$(URBAN_PREFIX)_16_$(URBAN_RUNID)/$(URBAN_PREFIX)_16_prediction.tif
+URBAN_2020=$(PREDICTION_DIR)$(URBAN_PREFIX)_20_$(URBAN_RUNID)/$(URBAN_PREFIX)_20_prediction.tif
 
 LAYERS=ag trans urban
 BLAYERS=at tu au atu
-EXT=tif
 
 YEARS=2013 2016 2020
 LAYER_YEARS=$(foreach LAYER, ${LAYERS}, $(foreach YEAR, ${YEARS}, ${LAYER}_${YEAR}))
 BLAYER_YEARS=$(foreach BLAYER, ${BLAYERS}, $(foreach YEAR, ${YEARS}, ${BLAYER}_${YEAR}_blend))
-RGBS=$(patsubst %, $(OUTPUT_DIR)%_rgb.$(EXT), $(LAYER_YEARS) $(BLAYER_YEARS))
+RGBS=$(patsubst %, $(OUTPUT_DIR)%_rgb.tif, $(LAYER_YEARS) $(BLAYER_YEARS))
 TILES=$(patsubst %, %.tiles, $(LAYER_YEARS) $(BLAYER_YEARS))
 
 tiles: $(TILES)
 rgbs: $(RGBS)
 
-%_blend_rgb.$(EXT):
+data/final/anthropogenic_impacts_2020.tif: $(AG_2020) $(TRANS_2020) $(URBAN_2020)
+	source src/data/combine_impacts.sh $^ $@
+	#python3 src/data/finalize_combined_impacts.py $@
+
+%_blend_rgb.tif:
 	source src/utils/blend_images.sh $^ $@
 
-%_rgb.$(EXT):
+%_rgb.tif:
 	source src/utils/export_rgb.sh $^ $@
 
-%.tiles: %_rgb.$(EXT)
+data/%.tiles: data/output/%_rgb.tif
 	source src/utils/make_raster_tiles.sh $^
-	touch data/$@
+	touch $@
 
 # NOt the prettiest, I admit
-$(OUTPUT_DIR)at_2013_blend_rgb.$(EXT): ag_2013_rgb.$(EXT) trans_2013_rgb.$(EXT)
-$(OUTPUT_DIR)at_2016_blend_rgb.$(EXT): ag_2016_rgb.$(EXT) trans_2016_rgb.$(EXT)
-$(OUTPUT_DIR)at_2020_blend_rgb.$(EXT): ag_2020_rgb.$(EXT) trans_2020_rgb.$(EXT)
-$(OUTPUT_DIR)au_2013_blend_rgb.$(EXT): ag_2013_rgb.$(EXT) urban_2013_rgb.$(EXT)
-$(OUTPUT_DIR)au_2016_blend_rgb.$(EXT): ag_2016_rgb.$(EXT) urban_2016_rgb.$(EXT)
-$(OUTPUT_DIR)au_2020_blend_rgb.$(EXT): ag_2020_rgb.$(EXT) urban_2020_rgb.$(EXT)
-$(OUTPUT_DIR)tu_2013_blend_rgb.$(EXT): trans_2013_rgb.$(EXT) urban_2013_rgb.$(EXT)
-$(OUTPUT_DIR)tu_2016_blend_rgb.$(EXT): trans_2016_rgb.$(EXT) urban_2016_rgb.$(EXT)
-$(OUTPUT_DIR)tu_2020_blend_rgb.$(EXT): trans_2020_rgb.$(EXT) urban_2020_rgb.$(EXT)
-$(OUTPUT_DIR)atu_2013_blend_rgb.$(EXT): tu_2013_blend_rgb.$(EXT) ag_2013_rgb.$(EXT)
-$(OUTPUT_DIR)atu_2016_blend_rgb.$(EXT): tu_2016_blend_rgb.$(EXT) ag_2016_rgb.$(EXT)
-$(OUTPUT_DIR)atu_2020_blend_rgb.$(EXT): tu_2020_blend_rgb.$(EXT) ag_2020_rgb.$(EXT)
+$(OUTPUT_DIR)at_2013_blend_rgb.tif: ag_2013_rgb.tif trans_2013_rgb.tif
+$(OUTPUT_DIR)at_2016_blend_rgb.tif: ag_2016_rgb.tif trans_2016_rgb.tif
+$(OUTPUT_DIR)at_2020_blend_rgb.tif: ag_2020_rgb.tif trans_2020_rgb.tif
+$(OUTPUT_DIR)au_2013_blend_rgb.tif: ag_2013_rgb.tif urban_2013_rgb.tif
+$(OUTPUT_DIR)au_2016_blend_rgb.tif: ag_2016_rgb.tif urban_2016_rgb.tif
+$(OUTPUT_DIR)au_2020_blend_rgb.tif: ag_2020_rgb.tif urban_2020_rgb.tif
+$(OUTPUT_DIR)tu_2013_blend_rgb.tif: trans_2013_rgb.tif urban_2013_rgb.tif
+$(OUTPUT_DIR)tu_2016_blend_rgb.tif: trans_2016_rgb.tif urban_2016_rgb.tif
+$(OUTPUT_DIR)tu_2020_blend_rgb.tif: trans_2020_rgb.tif urban_2020_rgb.tif
+$(OUTPUT_DIR)atu_2013_blend_rgb.tif: tu_2013_blend_rgb.tif ag_2013_rgb.tif
+$(OUTPUT_DIR)atu_2016_blend_rgb.tif: tu_2016_blend_rgb.tif ag_2016_rgb.tif
+$(OUTPUT_DIR)atu_2020_blend_rgb.tif: tu_2020_blend_rgb.tif ag_2020_rgb.tif
 
 # For ag, just use what the model returns
-$(OUTPUT_DIR)ag_2013_rgb.$(EXT): $(AG_2013) ag_col.txt
-$(OUTPUT_DIR)ag_2016_rgb.$(EXT): $(AG_2016) ag_col.txt
-$(OUTPUT_DIR)ag_2020_rgb.$(EXT): $(AG_2020) ag_col.txt
+$(OUTPUT_DIR)ag_2013_rgb.tif: $(AG_2013) ag_col.txt
+$(OUTPUT_DIR)ag_2016_rgb.tif: $(AG_2016) ag_col.txt
+$(OUTPUT_DIR)ag_2020_rgb.tif: $(AG_2020) ag_col.txt
 
-# For trans and urban, do max calcs for 2016 & 2020
-$(OUTPUT_DIR)trans_2013_rgb.$(EXT): $(TRANS_2013) trans_col.txt
-$(OUTPUT_DIR)trans_2016_rgb.$(EXT): trans_2016_max.$(EXT) trans_col.txt
-$(PREDICTION_DIR)trans_2016_max.$(EXT): $(TRANS_2016) $(TRANS_2013)
-	source src/utils/max_calc.sh $^ $@
-$(OUTPUT_DIR)trans_2020_rgb.$(EXT): trans_2020_max.$(EXT) trans_col.txt
-$(PREDICTION_DIR)trans_2020_max.$(EXT): $(TRANS_2020) $(TRANS_2016)
-	source src/utils/max_calc.sh $^ $@
+# For trans and urban, do min calcs for 2013 and 2016
+$(OUTPUT_DIR)trans_2020_rgb.tif: $(TRANS_2020) trans_col.txt
+$(PREDICTION_DIR)trans_2016_min.tif: $(TRANS_2020) $(TRANS_2016)
+	source src/utils/min_calc.sh $^ $@
+$(OUTPUT_DIR)trans_2016_rgb.tif: trans_2016_min.tif trans_col.txt
+$(PREDICTION_DIR)trans_2013_min.tif: $(TRANS_2013) trans_2016_min.tif
+	source src/utils/min_calc.sh $^ $@
+$(OUTPUT_DIR)trans_2013_rgb.tif: trans_2013_min.tif trans_col.txt
 
-$(OUTPUT_DIR)urban_2013_rgb.$(EXT): $(URBAN_2013) urban_col.txt
-$(OUTPUT_DIR)urban_2016_rgb.$(EXT): urban_2016_max.$(EXT) urban_col.txt
-$(PREDICTION_DIR)urban_2016_max.$(EXT): $(URBAN_2016) $(URBAN_2013)
-	source src/utils/max_calc.sh $^ $@
-$(OUTPUT_DIR)urban_2020_rgb.$(EXT): urban_2020_max.$(EXT) urban_col.txt
-$(PREDICTION_DIR)urban_2020_max.$(EXT): $(URBAN_2020) $(URBAN_2016)
-	source src/utils/max_calc.sh $^ $@
+$(OUTPUT_DIR)urban_2020_rgb.tif: $(URBAN_2020) urban_col.txt
+$(PREDICTION_DIR)urban_2016_min.tif: $(URBAN_2020) $(URBAN_2016)
+	source src/utils/min_calc.sh $^ $@
+$(OUTPUT_DIR)urban_2016_rgb.tif: urban_2016_min.tif urban_col.txt
+$(PREDICTION_DIR)urban_2013_min.tif: $(URBAN_2013) urban_2016_min.tif
+	source src/utils/min_calc.sh $^ $@
+$(OUTPUT_DIR)urban_2013_rgb.tif: urban_2013_min.tif urban_col.txt
+
 
 # Sorry
 2013_VRT=conus_hls_median_2013.vrt

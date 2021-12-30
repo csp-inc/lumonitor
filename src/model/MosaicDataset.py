@@ -222,13 +222,13 @@ class MosaicDataset(Dataset):
         """Returns a GeoDataFrame of the bounds of the given window"""
         return self._get_gpdf_from_bounds(bounds(window, transform))
 
-    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
+    #    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
     def _read_chip(self, ds: rio.DatasetReader, kwargs) -> np.ndarray:
         """Reads from the given dataset with the parameters in kwargs. Created
         mostly to utilize retry functionality"""
         return ds.read(**kwargs)
 
-    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
+    #    @retry(stop=stop_after_attempt(50), wait=wait_fixed(2))
     def _get_img_chip(self, window: Window) -> np.ndarray:
         """Returns the feature data for the given window"""
         with rio.open(self.feature_file) as img_ds:

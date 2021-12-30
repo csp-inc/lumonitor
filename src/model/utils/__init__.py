@@ -7,7 +7,7 @@ from azureml.core import Environment
 import rasterio as rio
 import torch
 
-from datasets.MosaicDataset import MosaicDataset as Dataset
+from MosaicDataset import MosaicDataset as Dataset
 
 
 def get_device(use_hvd: bool = True) -> torch.device:

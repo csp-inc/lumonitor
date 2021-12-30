@@ -11,8 +11,8 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from datasets.MosaicDataset import MosaicDataset as Dataset
-from models.Unet_padded import Unet
+from MosaicDataset import MosaicDataset as Dataset
+from Unet_padded import Unet
 from utils import get_device, get_output_specs
 from utils.chippers import hm_chipper
 
