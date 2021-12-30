@@ -34,6 +34,10 @@ TILES=$(patsubst %, %.tiles, $(LAYER_YEARS) $(BLAYER_YEARS))
 tiles: $(TILES)
 rgbs: $(RGBS)
 
+data/final/anthropogenic_impacts_2020.tif: $(AG_2020) $(TRANS_2020) $(URBAN_2020)
+	source src/data/combine_impacts.sh $^ $@
+	#python3 src/data/finalize_combined_impacts.py $@
+
 %_blend_rgb.tif:
 	source src/utils/blend_images.sh $^ $@
 

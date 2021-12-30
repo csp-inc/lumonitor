@@ -1,0 +1,100 @@
+<VRTDataset rasterXSize="161190" rasterYSize="104424">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["Albers_Conical_Equal_Area",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Albers_Conic_Equal_Area"],PARAMETER["latitude_of_center",23],PARAMETER["longitude_of_center",-96],PARAMETER["standard_parallel_1",29.5],PARAMETER["standard_parallel_2",45.5],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform> -2.4930450000000000e+06,  3.0000000000000000e+01,  0.0000000000000000e+00,  3.3100050000000000e+06,  0.0000000000000000e+00, -3.0000000000000000e+01</GeoTransform>
+  <VRTRasterBand dataType="Int16" band="1">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="2">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="3">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="4">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>4</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="5">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>5</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="6">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>6</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="7">
+    <NoDataValue>-1000</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/cog/conus_hls_median_2020.vrt</SourceFilename>
+      <SourceBand>7</SourceBand>
+      <SourceProperties RasterXSize="161190" RasterYSize="104424" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <DstRect xOff="0" yOff="0" xSize="161190" ySize="104424" />
+      <NODATA>-1000</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Int16" band="8">
+    <NoDataValue>-32768</NoDataValue>
+    <Scale>0.0001</Scale>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="0">/vsiaz/hls/viirs_2020.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="12273" RasterYSize="7725" DataType="Int16" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="12273" ySize="7725" />
+      <DstRect xOff="4564.3752372846" yOff="4581.23414241226" xSize="153810.463992618" ySize="96815.9120783019" />
+      <NODATA>-32768</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>
