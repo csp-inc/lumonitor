@@ -1,3 +1,4 @@
+# Packages needed during training on azml
 affine
 azureml-core
 geopandas

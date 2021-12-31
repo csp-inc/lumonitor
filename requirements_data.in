@@ -1,3 +1,4 @@
+# Packages for local processing, GDAL-type stuff, etc.
 adlfs
 azfs
 bokeh

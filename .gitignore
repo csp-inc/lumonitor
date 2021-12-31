@@ -1,3 +1,4 @@
+.azureml
 Dockerfile*built
 tmp
 venv
