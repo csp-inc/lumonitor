@@ -74,3 +74,6 @@ reasonable time. Prediction code files are
 [src/model/predict.py](src/model/predict.py).
 
 ### 4. Data Export
+Color ramps for each impact type were prepared "by hand" in QGIS and used to 
+create raster tiles served from blob storage to the web application at 
+https://cspbeta.z22.web.core.windows.net/project2. 
